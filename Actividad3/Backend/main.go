@@ -17,10 +17,11 @@ func main() {
 
 	// Implementamos el middleware CORS a nivel global usando app.Use() para interceptar todas las peticiones entrantes.
 	app.Use(cors.New(cors.Config{
-		// Configuramos el CORS para permitir únicamente peticiones provenientes del frontend local en el puerto 5173.
-		AllowOrigins: "http://172.17.82.108:5173",
-		// Declaramos de forma explícita qué cabeceras (Headers) se permitirán en la comunicación.
-		AllowHeaders: "Origin, Content-Type, Accept",
+		// Configuramos el CORS para permitir peticiones desde localhost, loopback IP y red local.
+		AllowOrigins: "http://localhost:5173, http://127.0.0.1:5173, http://172.17.82.108:5173, *",
+		// Declaramos de forma explícita qué cabeceras y métodos se permitirán en la comunicación.
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowMethods: "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
 	}))
 
 	// Llamamos a la función SetupRoutes de nuestro paquete 'routes', enviándole la instancia de nuestra 'app'.

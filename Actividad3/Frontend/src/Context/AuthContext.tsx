@@ -1,37 +1,59 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from "react";
+
 interface AuthContextType {
-    isAuthenticated: boolean;
-    userEmail: string | null; // <-- 1. Nuevo estado para el correo
-    login: (email: string) => void; // <-- 2. La función ahora recibe el correo
-    logout: () => void;
+  isAuthenticated: boolean;
+  userEmail: string | null;
+  token: string | null;
+  login: (email: string, token: string) => void;
+  logout: () => void;
 }
-const AuthContext = createContext<AuthContextType |
-    undefined>(undefined);
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
 export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error("useAuth debe ser usado dentro de un AuthProvider");
-    }
-    return context;
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth debe ser usado dentro de un AuthProvider");
+  }
+  return context;
 };
+
 interface AuthProviderProps {
-    children: ReactNode;
+  children: ReactNode;
 }
+
 export const AuthProvider = ({ children }: AuthProviderProps) => {
-    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-    const [userEmail, setUserEmail] = useState<string | null>(null); // <-- 3.Estado local
-    // 4. Actualizamos las funciones
-    const login = (email: string) => {
-        setIsAuthenticated(true);
-        setUserEmail(email); // Guardamos el correo
-    };
-    const logout = () => {
-        setIsAuthenticated(false);
-        setUserEmail(null); // Limpiamos el correo al salir
-    };
-    return (
-        <AuthContext.Provider value={{ isAuthenticated, userEmail, login, logout }}>
-            {children}
-        </AuthContext.Provider>
-    );
+  const [token, setToken] = useState<string | null>(() =>
+    localStorage.getItem("token")
+  );
+  const [userEmail, setUserEmail] = useState<string | null>(() =>
+    localStorage.getItem("userEmail")
+  );
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() =>
+    Boolean(localStorage.getItem("token"))
+  );
+
+  const login = (email: string, authToken: string) => {
+    setIsAuthenticated(true);
+    setUserEmail(email);
+    setToken(authToken);
+    localStorage.setItem("token", authToken);
+    localStorage.setItem("userEmail", email);
+  };
+
+  const logout = () => {
+    setIsAuthenticated(false);
+    setUserEmail(null);
+    setToken(null);
+    localStorage.removeItem("token");
+    localStorage.removeItem("userEmail");
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{ isAuthenticated, userEmail, token, login, logout }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };
