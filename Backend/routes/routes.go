@@ -1,16 +1,22 @@
-// Declaramos el paquete routes, cuya única responsabilidad es registrar los endpoints de la API.
+// Package routes registra y enlaza los endpoints con los controladores correspondientes.
 package routes
 
 import (
-	// Importamos Fiber para poder recibir y configurar la instancia principal de la aplicación.
 	"github.com/gofiber/fiber/v2"
-	// Importamos nuestro paquete de controladores, donde residen las funciones que se ejecutarán en cada ruta.
 	"multicatalogo-backend/controllers"
 )
 
-// SetupRoutes es una función que recibe un puntero a la aplicación Fiber (*fiber.App) para inyectarle las rutas.
+// SetupRoutes configura las rutas HTTP del servidor Fiber.
 func SetupRoutes(app *fiber.App) {
-	// Definimos una ruta HTTP POST en "/api/login" y la enlazamos a la función Login del paquete controllers.
-	app.Post("/api/login", controllers.Login)
-	app.Get("/api/productos", controllers.GetProductos)
+	api := app.Group("/api")
+
+	// Autenticación
+	api.Post("/login", controllers.Login)
+
+	// Catálogo de Productos
+	api.Get("/productos", controllers.GetProductos)
+	api.Get("/productos/:id", controllers.GetProductoByID)
+
+	// Red Multinivel
+	api.Get("/red", controllers.GetRed)
 }

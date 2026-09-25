@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "../../Context/AuthContext";
 import { Icon } from "../Share/Icon";
 import type { IconName } from "lucide-react/dynamic";
 
@@ -6,6 +7,7 @@ interface NavItem {
   name: string;
   path: string;
   icon: IconName;
+  soloAdmin?: boolean;
 }
 
 interface SidebarProps {
@@ -15,18 +17,27 @@ interface SidebarProps {
 }
 
 const navItems: NavItem[] = [
-  { name: "Dashboard", path: "/", icon: "layout-dashboard" },
+  { name: "Dashboard", path: "/", icon: "layout-dashboard", soloAdmin: true },
+  { name: "Tienda", path: "/tienda", icon: "shopping-bag" },
   { name: "Catálogo", path: "/catalogo", icon: "store" },
-  { name: "Mi Red", path: "/mi-red", icon: "users" },
+  { name: "Mi Red", path: "/mi-red", icon: "users", soloAdmin: true },
   { name: "Carrito", path: "/carrito", icon: "shopping-cart" },
 ];
 
+/**
+ * Componente Sidebar responsive con filtrado de navegación según el rol del usuario.
+ */
 const Sidebar = ({
   isCollapsed,
   mobileOpen = false,
   onCloseMobile,
 }: SidebarProps) => {
+  const { user } = useAuth();
   const location = useLocation();
+
+  const itemsPermitidos = navItems.filter(
+    (item) => !item.soloAdmin || user?.rol === "admin"
+  );
 
   return (
     <>
@@ -78,8 +89,11 @@ const Sidebar = ({
 
         {/* Navigation items */}
         <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
+          {itemsPermitidos.map((item) => {
+            const isActive =
+              item.path === "/"
+                ? location.pathname === "/"
+                : location.pathname.startsWith(item.path);
 
             return (
               <Link
@@ -111,12 +125,19 @@ const Sidebar = ({
           })}
         </nav>
 
-        {/* Footer info in sidebar */}
+        {/* Footer info in sidebar con Rol */}
         <div className="p-3 border-t border-slate-800 text-xs text-slate-400 text-center">
           {isCollapsed ? (
-            <span className="hidden md:inline">v1.0</span>
+            <span className="uppercase font-semibold text-indigo-400">
+              {user?.rol}
+            </span>
           ) : (
-            <span>Sistema v1.0</span>
+            <p>
+              Conectado como:{" "}
+              <span className="font-semibold uppercase text-indigo-400">
+                {user?.rol}
+              </span>
+            </p>
           )}
         </div>
       </aside>

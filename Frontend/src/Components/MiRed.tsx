@@ -1,90 +1,235 @@
-import { Icon } from "./Share/Icon";
+import { useEffect, useState } from "react";
+import { getRed } from "../services/redService";
+import {
+  contarRed,
+  sumarVentasRed,
+  sumarComisiones,
+  nivelAlcanzado,
+  comisionDeReferido,
+  TASA_COMISION,
+  type Referido,
+} from "../data/red";
 
-const MiRed = () => {
-    const referidos = [
-        { id: 1, nombre: "Ana García", nivel: "Nivel 1", ventas: "$1,200" },
-        { id: 2, nombre: "Luis Poveda", nivel: "Nivel 1", ventas: "$850" },
-        { id: 3, nombre: "Marta Sánchez", nivel: "Nivel 2", ventas: "$430" },
-    ];
+const NIVEL_ESTILO: Record<
+  number,
+  { badge: string; border: string; tasa: string }
+> = {
+  1: {
+    badge: "bg-indigo-100 text-indigo-700",
+    border: "border-indigo-200",
+    tasa: "10 %",
+  },
+  2: {
+    badge: "bg-purple-100 text-purple-700",
+    border: "border-purple-200",
+    tasa: "5 %",
+  },
+  3: {
+    badge: "bg-pink-100 text-pink-700",
+    border: "border-pink-200",
+    tasa: "2 %",
+  },
+};
 
-    return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-slate-800">
-                    Mi Red de Referidos
-                </h1>
-                <p className="text-sm text-slate-500 mt-1">
-                    Visualiza el desempeño y ventas de tus miembros afiliados.
-                </p>
-            </div>
+/**
+ * Componente recursivo para renderizar cada nodo del árbol de referidos multinivel.
+ * @param {Object} props - Propiedades del componente.
+ * @param {Referido} props.nodo - Nodo del miembro de la red.
+ */
+const NodoReferido = ({ nodo }: { nodo: Referido }) => {
+  const estilo = NIVEL_ESTILO[nodo.nivel] ?? NIVEL_ESTILO[1];
+  const comision = comisionDeReferido(nodo);
 
-            {/* Vista en formato Cards para móviles (< md) */}
-            <div className="grid grid-cols-1 gap-4 md:hidden">
-                {referidos.map((ref) => (
-                    <div
-                        key={ref.id}
-                        className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3"
-                    >
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-semibold text-sm">
-                                    <Icon name="user" size={20} />
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold text-slate-800 text-base">
-                                        {ref.nombre}
-                                    </h3>
-                                    <span className="inline-block bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium mt-0.5">
-                                        {ref.nivel}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-sm">
-                            <span className="text-slate-500 font-medium">Ventas Mensuales:</span>
-                            <span className="text-indigo-600 font-bold text-base">
-                                {ref.ventas}
-                            </span>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Vista en formato Tabla para pantallas medianas y grandes (>= md) */}
-            <div className="hidden md:block bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-slate-50 border-b border-slate-200">
-                        <tr>
-                            <th className="p-4 font-semibold text-slate-600">Nombre</th>
-                            <th className="p-4 font-semibold text-slate-600">Jerarquía</th>
-                            <th className="p-4 font-semibold text-slate-600">
-                                Ventas Mensuales
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {referidos.map((ref) => (
-                            <tr
-                                key={ref.id}
-                                className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
-                            >
-                                <td className="p-4 text-slate-800 font-medium">{ref.nombre}</td>
-                                <td className="p-4 text-slate-500">
-                                    <span className="bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-full font-medium">
-                                        {ref.nivel}
-                                    </span>
-                                </td>
-                                <td className="p-4 text-indigo-600 font-bold">
-                                    {ref.ventas}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+  return (
+    <li>
+      <div
+        className={`bg-white rounded-lg border ${estilo.border} shadow-sm p-4 flex flex-wrap items-center justify-between gap-3`}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600">
+            {nodo.nombre.charAt(0)}
+          </div>
+          <div>
+            <p className="font-semibold text-slate-800">{nodo.nombre}</p>
+            <span
+              className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full ${estilo.badge}`}
+            >
+              Nivel {nodo.nivel} · {estilo.tasa} comisión
+            </span>
+          </div>
         </div>
+        <div className="text-right">
+          <p className="text-sm text-slate-500">Ventas</p>
+          <p className="font-bold text-slate-800">
+            ${nodo.ventas.toLocaleString()}
+          </p>
+          <p className="text-xs text-indigo-600 font-semibold mt-1">
+            +${comision.toFixed(2)} para ti
+          </p>
+        </div>
+      </div>
+
+      {nodo.hijos && nodo.hijos.length > 0 && (
+        <ul className="mt-3 ml-6 space-y-3 border-l-2 border-slate-200 pl-4">
+          {nodo.hijos.map((hijo) => (
+            <NodoReferido key={hijo.id} nodo={hijo} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+};
+
+/**
+ * Vista de Mi Red con árbol jerárquico y cálculo de comisiones multinivel consumidas desde el backend.
+ */
+const MiRed = () => {
+  const [red, setRed] = useState<Referido | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const cargarRed = () => {
+    setLoading(true);
+    setError(null);
+    getRed()
+      .then((data) => {
+        setRed(data);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        setError(
+          err instanceof Error ? err.message : "Error al cargar la red multinivel"
+        );
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    let activo = true;
+    getRed()
+      .then((data) => {
+        if (activo) {
+          setRed(data);
+          setLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (activo) {
+          setError(
+            err instanceof Error ? err.message : "Error al cargar la red multinivel"
+          );
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  if (loading) {
+    return <div className="text-center p-8 text-slate-500">Cargando red multinivel...</div>;
+  }
+
+  if (error || !red) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-xl text-center space-y-3">
+        <p className="font-semibold">{error || "No se pudo cargar la red"}</p>
+        <button
+          onClick={cargarRed}
+          className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition"
+        >
+          Reintentar
+        </button>
+      </div>
     );
+  }
+
+  const referidosActivos = contarRed(red);
+  const ventasRed = sumarVentasRed(red);
+  const comisionesMes = sumarComisiones(red);
+  const nivel = nivelAlcanzado(red.hijos?.length ?? 0);
+
+  const resumen = [
+    {
+      etiqueta: "Referidos Activos",
+      valor: referidosActivos.toString(),
+      color: "text-indigo-600",
+    },
+    {
+      etiqueta: "Ventas de la Red",
+      valor: `$${ventasRed.toLocaleString()}`,
+      color: "text-indigo-600",
+    },
+    {
+      etiqueta: "Comisiones del Mes",
+      valor: `$${comisionesMes.toFixed(2)}`,
+      color: "text-green-600",
+    },
+    {
+      etiqueta: "Nivel Alcanzado",
+      valor: nivel,
+      color: "text-amber-600",
+    },
+  ];
+
+  return (
+    <div>
+      <h1 className="text-2xl font-bold text-slate-800 mb-2">
+        Mi Red de Referidos
+      </h1>
+      <p className="text-slate-500 mb-6">
+        Estructura multinivel: gana el {TASA_COMISION[1] * 100} % de nivel 1,{" "}
+        {TASA_COMISION[2] * 100} % de nivel 2 y {TASA_COMISION[3] * 100} % de nivel 3.
+      </p>
+
+      {/* Tarjetas de resumen */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {resumen.map((item) => (
+          <div
+            key={item.etiqueta}
+            className="bg-white p-6 rounded-lg shadow-sm border border-slate-100"
+          >
+            <p className="text-sm text-slate-500 uppercase font-semibold">
+              {item.etiqueta}
+            </p>
+            <p className={`text-3xl font-bold mt-2 ${item.color}`}>
+              {item.valor}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Árbol de referidos */}
+      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
+        <h2 className="text-lg font-bold text-slate-800 mb-4">
+          Jerarquía de tu Red
+        </h2>
+
+        {/* Raíz: Usuario autenticado */}
+        <div className="bg-slate-900 text-white rounded-lg p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-bold">
+              {red.nombre.charAt(0)}
+            </div>
+            <div>
+              <p className="font-semibold">{red.nombre}</p>
+              <p className="text-xs text-slate-300">Nivel alcanzado: {nivel}</p>
+            </div>
+          </div>
+          <p className="font-bold text-green-400">
+            Comisiones del mes: ${comisionesMes.toFixed(2)}
+          </p>
+        </div>
+
+        <ul className="space-y-3">
+          {red.hijos?.map((hijo) => (
+            <NodoReferido key={hijo.id} nodo={hijo} />
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
 };
 
 export default MiRed;

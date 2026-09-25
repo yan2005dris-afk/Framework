@@ -1,9 +1,11 @@
-// src/Components/Auth/Login/Login.tsx
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../../Context/AuthContext";
+import { useAuth, type Rol } from "../../../Context/AuthContext";
 import { api } from "../../../services/api";
 
+/**
+ * Componente de inicio de sesión con soporte para roles y redirección según perfil.
+ */
 const Login = () => {
   const [email, setEmail] = useState<string>("admin@upse.edu.ec");
   const [password, setPassword] = useState<string>("123456");
@@ -19,8 +21,11 @@ const Login = () => {
 
     try {
       const data = await api.login(email, password);
-      login(data.email, data.token);
-      navigate("/");
+      const rol: Rol = data.rol === "admin" ? "admin" : "cliente";
+      login({ email: data.email, rol }, data.token);
+
+      // Redirigir según el rol del usuario
+      navigate(rol === "admin" ? "/" : "/tienda");
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -84,9 +89,19 @@ const Login = () => {
             disabled={loading}
             className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
           >
-            {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
+            {loading ? "Validando..." : "Iniciar Sesión"}
           </button>
         </form>
+
+        <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1">
+          <p className="font-semibold text-slate-700">Cuentas de prueba:</p>
+          <p>
+            👑 Admin: <span className="font-mono">admin@upse.edu.ec / 123456</span>
+          </p>
+          <p>
+            🛍️ Cliente: <span className="font-mono">cliente@upse.edu.ec / 123456</span>
+          </p>
+        </div>
       </div>
     </div>
   );
