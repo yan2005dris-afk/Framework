@@ -2,9 +2,16 @@
 node_modules/
 .pnpm-store/
 
-# Production
+# Production & Builds
 dist/
 build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/Backend/multicatalogo-backend
+multicatalogo-backend
 
 # Environment
 .env
@@ -16,6 +23,7 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 
-# OS
+# OS & Office Locks
 .DS_Store
 Thumbs.db
+.~lock.*#
