@@ -1,48 +1,106 @@
-// src/App.tsx
-
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
-import { AuthProvider, useAuth } from "./Context/AuthContext";
-import { CartProvider } from "./Context/CartContext";
-import Login from "./Components/Auth/Login/Login";
+import { type ReactNode } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
 import Layout from "./Components/Layout/Layout";
 import Dashboard from "./Components/Dashboard/Dashboard";
 import Catalogo from "./Components/Catalogo/Catalogo";
+import Storefront from "./Components/Storefront/Storefront";
+import DetalleProducto from "./Components/Catalogo/DetalleProducto";
 import MiRed from "./Components/MiRed";
 import Carrito from "./Components/Carrito/Carrito";
+import Checkout from "./Components/Carrito/Checkout";
+import Confirmacion from "./Components/Carrito/Confirmacion";
+import Login from "./Components/Auth/Login/Login";
+import { CartProvider } from "./Context/CartContext";
+import { AuthProvider, useAuth } from "./Context/AuthContext";
 
-// Componente para proteger las rutas privadas
+/**
+ * Guarda de ruta que requiere que el usuario esté autenticado.
+ */
 const ProtectedRoute = () => {
   const { isAuthenticated } = useAuth();
-  // Si no está autenticado, lo enviamos al login
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
-  // Si está autenticado, renderiza las rutas hijas (Outlet)
+
   return <Outlet />;
 };
+
+/**
+ * Guarda de ruta exclusiva para administradores.
+ * Redirige a los clientes hacia la vista de tienda.
+ */
+const AdminRoute = () => {
+  const { isAuthenticated, user } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user?.rol !== "admin") {
+    return <Navigate to="/tienda" replace />;
+  }
+
+  return <Outlet />;
+};
+
+/**
+ * CartBoundary remonta el CartProvider según el email del usuario para garantizar
+ * el aislamiento e integridad de los datos del carrito por cuenta.
+ */
+const CartBoundary = ({ children }: { children: ReactNode }) => {
+  const { user } = useAuth();
+  return (
+    <CartProvider key={user?.email ?? "anonimo"}>
+      {children}
+    </CartProvider>
+  );
+};
+
+/**
+ * Componente principal de la aplicación con la configuración del enrutador y los proveedores globales.
+ */
 function App() {
   return (
-    <AuthProvider> {/* Proveedor de Autenticación */}
-      <CartProvider> {/* Proveedor del Carrito */}
+    <AuthProvider>
+      <CartBoundary>
         <BrowserRouter>
           <Routes>
             {/* Ruta pública */}
             <Route path="/login" element={<Login />} />
+
             {/* Rutas protegidas */}
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<Layout />}>
-                <Route index element={<Dashboard />} />
+                {/* Solo administrador */}
+                <Route element={<AdminRoute />}>
+                  <Route index element={<Dashboard />} />
+                  <Route path="mi-red" element={<MiRed />} />
+                </Route>
+
+                {/* Ambos roles (admin y cliente) */}
+                <Route path="tienda" element={<Storefront />} />
                 <Route path="catalogo" element={<Catalogo />} />
-                <Route path="mi-red" element={<MiRed />} />
+                <Route path="producto/:id" element={<DetalleProducto />} />
                 <Route path="carrito" element={<Carrito />} />
+                <Route path="checkout" element={<Checkout />} />
+                <Route path="confirmacion" element={<Confirmacion />} />
               </Route>
             </Route>
-            {/* Ruta comodín para capturar 404 y redirigir */}
+
+            {/* Redirección por defecto */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
-      </CartProvider>
+      </CartBoundary>
     </AuthProvider>
   );
 }
+
 export default App;

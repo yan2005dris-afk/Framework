@@ -8,9 +8,12 @@ interface NavbarProps {
   isCollapsed?: boolean;
 }
 
+/**
+ * Barra superior de navegación con badge de rol, contador de carrito y menú de usuario.
+ */
 const Navbar = ({ onToggleSidebar }: NavbarProps) => {
   const { totalItems } = useCart();
-  const { logout, userEmail } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -30,7 +33,9 @@ const Navbar = ({ onToggleSidebar }: NavbarProps) => {
           <Icon name="menu" size={22} />
         </button>
         <h2 className="text-slate-800 font-semibold text-base sm:text-lg">
-          Panel de Administración
+          {user?.rol === "admin"
+            ? "Panel de Administración"
+            : "Tienda MultiCatálogo"}
         </h2>
       </div>
 
@@ -50,9 +55,21 @@ const Navbar = ({ onToggleSidebar }: NavbarProps) => {
         </Link>
 
         <div className="flex items-center gap-3">
-          {userEmail && (
+          {user?.email && (
             <span className="hidden md:inline text-xs sm:text-sm text-slate-500 max-w-[150px] truncate">
-              {userEmail}
+              {user.email}
+            </span>
+          )}
+
+          {user?.rol && (
+            <span
+              className={`hidden sm:inline-block text-xs font-bold px-2.5 py-0.5 rounded-full uppercase ${
+                user.rol === "admin"
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-indigo-100 text-indigo-800"
+              }`}
+            >
+              {user.rol}
             </span>
           )}
 
@@ -66,11 +83,15 @@ const Navbar = ({ onToggleSidebar }: NavbarProps) => {
               />
             </div>
 
-            {/* Menú desplegable en Hover / Focus */}
+            {/* Menú desplegable */}
             <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50 p-1">
               <div className="px-3 py-2 border-b border-slate-100 md:hidden">
-                <p className="text-xs text-slate-400 font-medium">Conectado como:</p>
-                <p className="text-xs text-slate-700 font-semibold truncate">{userEmail}</p>
+                <p className="text-xs text-slate-400 font-medium">
+                  Conectado como:
+                </p>
+                <p className="text-xs text-slate-700 font-semibold truncate">
+                  {user?.email}
+                </p>
               </div>
               <button
                 onClick={handleLogout}
