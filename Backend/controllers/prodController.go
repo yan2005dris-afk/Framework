@@ -127,8 +127,10 @@ func GetProductoByID(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "El ID del producto debe ser numérico",
+		return c.Status(fiber.StatusBadRequest).JSON(models.APIError{
+			Status:  fiber.StatusBadRequest,
+			Message: "El ID del producto debe ser numérico",
+			Details: idParam,
 		})
 	}
 
@@ -138,7 +140,8 @@ func GetProductoByID(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-		"error": "Producto no encontrado",
+	return c.Status(fiber.StatusNotFound).JSON(models.APIError{
+		Status:  fiber.StatusNotFound,
+		Message: "Producto no encontrado",
 	})
 }
