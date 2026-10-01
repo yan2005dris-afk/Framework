@@ -18,6 +18,13 @@ type Producto struct {
 	Galeria     []string `json:"galeria"`
 }
 
+// APIError estandariza los mensajes de error HTTP de la API.
+type APIError struct {
+	Status  int         `json:"status"`
+	Message string      `json:"message"`
+	Details interface{} `json:"details,omitempty"`
+}
+
 // Referido define la estructura jerárquica de un miembro en la red multinivel.
 type Referido struct {
 	ID     int        `json:"id"`

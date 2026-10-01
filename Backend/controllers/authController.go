@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"multicatalogo-backend/models"
+	"multicatalogo-backend/repository"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -11,16 +12,27 @@ func Login(context *fiber.Ctx) error {
 	var req models.LoginRequest
 
 	if err := context.BodyParser(&req); err != nil {
-		return context.Status(400).JSON(fiber.Map{"error": "Cuerpo de petición inválido"})
+		return context.Status(fiber.StatusBadRequest).JSON(models.APIError{
+			Status:  fiber.StatusBadRequest,
+			Message: "Cuerpo de petición inválido",
+			Details: err.Error(),
+		})
 	}
 
-	switch {
-	case req.Email == "admin@upse.edu.ec" && req.Password == "123456":
-		return context.JSON(fiber.Map{"token": "fake-jwt-token-123", "email":req.Email, "rol": "admin"})
-
-	case req.Email == "cliente@upse.edu.ec" && req.Password == "123456":
-		return context.JSON(fiber.Map{"token": "fake-jwt-token-123", "email":req.Email, "rol": "cliente"})
-	default:
-		return context.Status(401).JSON(fiber.Map{"error": "Credenciales incorrectas"})
+	if req.Email == "" || req.Password == "" {
+		return context.Status(fiber.StatusBadRequest).JSON(models.APIError{
+			Status:  fiber.StatusBadRequest,
+			Message: "Los campos email y password son obligatorios",
+		})
 	}
+
+	rol, ok := repository.ValidateCredentials(req.Email, req.Password)
+	if !ok {
+		return context.Status(fiber.StatusUnauthorized).JSON(models.APIError{
+			Status:  fiber.StatusUnauthorized,
+			Message: "Credenciales incorrectas",
+		})
+	}
+
+	return context.JSON(fiber.Map{"token": "fake-jwt-token-123", "email": req.Email, "rol": rol})
 }
