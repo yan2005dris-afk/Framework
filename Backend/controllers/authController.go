@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"multicatalogo-backend/models"
+	"multicatalogo-backend/repository"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -25,16 +26,13 @@ func Login(context *fiber.Ctx) error {
 		})
 	}
 
-	switch {
-	case req.Email == "admin@upse.edu.ec" && req.Password == "123456":
-		return context.JSON(fiber.Map{"token": "fake-jwt-token-123", "email": req.Email, "rol": "admin"})
-
-	case req.Email == "cliente@upse.edu.ec" && req.Password == "123456":
-		return context.JSON(fiber.Map{"token": "fake-jwt-token-123", "email": req.Email, "rol": "cliente"})
-	default:
+	rol, ok := repository.ValidateCredentials(req.Email, req.Password)
+	if !ok {
 		return context.Status(fiber.StatusUnauthorized).JSON(models.APIError{
 			Status:  fiber.StatusUnauthorized,
 			Message: "Credenciales incorrectas",
 		})
 	}
+
+	return context.JSON(fiber.Map{"token": "fake-jwt-token-123", "email": req.Email, "rol": rol})
 }
