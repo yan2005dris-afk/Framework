@@ -2,49 +2,24 @@
 package controllers
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v2"
-	"multicatalogo-backend/models"
+	"multicatalogo-backend/repository"
 )
 
-// redInicialData contiene el árbol jerárquico de referidos multinivel.
-var redInicialData = models.Referido{
-	ID:     0,
-	Nombre: "Tú",
-	Nivel:  0,
-	Ventas: 2400,
-	Hijos: []models.Referido{
-		{
-			ID:     1,
-			Nombre: "Ana García",
-			Nivel:  1,
-			Ventas: 1200,
-			Hijos: []models.Referido{
-				{
-					ID:     4,
-					Nombre: "Carlos Ruiz",
-					Nivel:  2,
-					Ventas: 500,
-					Hijos: []models.Referido{
-						{ID: 7, Nombre: "Diana Paz", Nivel: 3, Ventas: 300},
-					},
-				},
-				{ID: 5, Nombre: "Sofía León", Nivel: 2, Ventas: 430},
-			},
-		},
-		{
-			ID:     2,
-			Nombre: "Luis Poveda",
-			Nivel:  1,
-			Ventas: 850,
-			Hijos: []models.Referido{
-				{ID: 6, Nombre: "Marco Díaz", Nivel: 2, Ventas: 380},
-			},
-		},
-		{ID: 3, Nombre: "Marta Sánchez", Nivel: 1, Ventas: 430},
-	},
-}
-
-// GetRed retorna la estructura jerárquica de la red de referidos.
+// GetRed retorna la estructura jerárquica de la red de referidos desde la base de datos.
 func GetRed(c *fiber.Ctx) error {
-	return c.JSON(redInicialData)
+	red, err := repository.ObtenerRed()
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Estructura de red no encontrada",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Error al obtener la red de referidos",
+		})
+	}
+	return c.JSON(red)
 }

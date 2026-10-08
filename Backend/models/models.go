@@ -7,6 +7,14 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// Usuario representa la entidad de usuario almacenada en la base de datos.
+type Usuario struct {
+	ID       int    `json:"id"`
+	Email    string `json:"email"`
+	Password string `json:"-"`
+	Rol      string `json:"rol"`
+}
+
 // Producto define la estructura completa de un artículo en el catálogo.
 type Producto struct {
 	ID          int      `json:"id"`
@@ -25,4 +33,13 @@ type Referido struct {
 	Nivel  int        `json:"nivel"`
 	Ventas float64    `json:"ventas"`
 	Hijos  []Referido `json:"hijos,omitempty"`
+}
+
+// ReferidoRow modela un registro plano de la tabla referidos para reconstrucción de jerarquía.
+type ReferidoRow struct {
+	ID       int
+	Nombre   string
+	Nivel    int
+	Ventas   float64
+	ParentID *int
 }
