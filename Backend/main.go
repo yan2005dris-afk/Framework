@@ -3,14 +3,23 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"multicatalogo-backend/config"
 	"multicatalogo-backend/routes"
 )
 
 func main() {
+	// Conexión a la base de datos PostgreSQL
+	if _, err := config.ConnectDB(); err != nil {
+		log.Printf("⚠️ Advertencia: No se pudo conectar a PostgreSQL: %v", err)
+	} else {
+		defer config.CloseDB()
+	}
+
 	app := fiber.New()
 
 	// Middleware de logger para ver las peticiones en consola
@@ -28,10 +37,14 @@ func main() {
 	// Registramos las rutas
 	routes.SetupRoutes(app)
 
-	fmt.Println("🚀 Servidor Backend iniciado en http://localhost:8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
-	// Escuchamos en el puerto 8080 (el puerto 3000 estaba ocupado por otro servicio del sistema)
-	if err := app.Listen(":8080"); err != nil {
+	fmt.Printf("🚀 Servidor Backend iniciado en http://localhost:%s\n", port)
+
+	if err := app.Listen(":" + port); err != nil {
 		log.Fatalf("Error al iniciar el servidor: %v", err)
 	}
 }
