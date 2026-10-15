@@ -9,23 +9,37 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"multicatalogo-backend/config"
+	"multicatalogo-backend/controllers"
+	"multicatalogo-backend/repository"
 	"multicatalogo-backend/routes"
 )
 
 func main() {
 	// Conexión a la base de datos PostgreSQL
-	if _, err := config.ConnectDB(); err != nil {
+	dbPool, err := config.ConnectDB()
+	if err != nil {
 		log.Printf("⚠️ Advertencia: No se pudo conectar a PostgreSQL: %v", err)
 	} else {
 		defer config.CloseDB()
 	}
 
 	// Conexión a Redis
-	if _, err := config.ConnectRedis(); err != nil {
+	redisClient, err := config.ConnectRedis()
+	if err != nil {
 		log.Printf("⚠️ Advertencia: No se pudo conectar a Redis: %v", err)
 	} else {
 		defer config.CloseRedis()
 	}
+
+	// Instanciación de repositorios (Inyección de Dependencias)
+	dbRepo := repository.NewPostgresRepository(dbPool)
+	cacheRepo := repository.NewRedisCacheRepository(redisClient)
+
+	// Instanciación de controladores con dependencias inyectadas
+	authCtrl := controllers.NewAuthController(dbRepo)
+	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo)
+	redCtrl := controllers.NewRedController(dbRepo, cacheRepo)
+	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo)
 
 	app := fiber.New()
 
@@ -41,8 +55,8 @@ func main() {
 		AllowMethods: "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
 	}))
 
-	// Registramos las rutas
-	routes.SetupRoutes(app)
+	// Registramos las rutas inyectando los controladores
+	routes.SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl)
 
 	port := os.Getenv("PORT")
 	if port == "" {
