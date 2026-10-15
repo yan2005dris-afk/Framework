@@ -1,4 +1,3 @@
-// Package controllers implementa la lógica de negocio para los endpoints de la API.
 package controllers
 
 import (
