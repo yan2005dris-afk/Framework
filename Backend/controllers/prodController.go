@@ -2,21 +2,46 @@
 package controllers
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"multicatalogo-backend/config"
+	"multicatalogo-backend/models"
 	"multicatalogo-backend/repository"
 )
 
-// GetProductos retorna la lista completa de productos desde la base de datos.
+// GetProductos retorna la lista completa de productos desde la base de datos con Cache-Aside.
 func GetProductos(c *fiber.Ctx) error {
+	ctx := context.Background()
+	cacheKey := "productos:all"
+
+	// 1. Intentar leer desde Redis (Cache Hit)
+	cachedData, err := config.RedisClient.Get(ctx, cacheKey).Bytes()
+	if err == nil {
+		var productos []models.Producto
+		if err := json.Unmarshal(cachedData, &productos); err == nil {
+			return c.JSON(productos)
+		}
+	}
+
+	// 2. Cache Miss: consultar PostgreSQL
 	productos, err := repository.ObtenerProductos()
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Error al obtener productos",
 		})
 	}
+
+	// 3. Guardar en Redis con TTL de 5 minutos
+	data, err := json.Marshal(productos)
+	if err == nil {
+		config.RedisClient.Set(ctx, cacheKey, data, 5*time.Minute)
+	}
+
 	return c.JSON(productos)
 }
 

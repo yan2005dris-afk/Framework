@@ -20,6 +20,13 @@ func main() {
 		defer config.CloseDB()
 	}
 
+	// Conexión a Redis
+	if _, err := config.ConnectRedis(); err != nil {
+		log.Printf("⚠️ Advertencia: No se pudo conectar a Redis: %v", err)
+	} else {
+		defer config.CloseRedis()
+	}
+
 	app := fiber.New()
 
 	// Middleware de logger para ver las peticiones en consola
