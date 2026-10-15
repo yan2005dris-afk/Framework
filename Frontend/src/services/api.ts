@@ -9,6 +9,29 @@ export interface LoginResponse {
   rol: Rol;
 }
 
+export interface CheckoutItemDTO {
+  productoId: number;
+  cantidad: number;
+  precio: number;
+}
+
+export interface CheckoutRequestDTO {
+  nombreCliente: string;
+  emailCliente: string;
+  direccion?: string;
+  ciudad?: string;
+  telefono?: string;
+  metodoPago: string;
+  items: CheckoutItemDTO[];
+}
+
+export interface CheckoutResponseDTO {
+  pedidoId: number;
+  numero: string;
+  total: number;
+  mensaje: string;
+}
+
 /**
  * Cliente centralizado para servicios de API.
  */
@@ -56,4 +79,29 @@ export const api = {
 
     return response.json();
   },
+
+  /**
+   * Procesa la orden de compra a través del endpoint transaccional ACID del backend.
+   * @param {CheckoutRequestDTO} payload - Datos de la compra y artículos del carrito.
+   * @returns {Promise<CheckoutResponseDTO>} Resultado del pedido confirmado.
+   */
+  async checkout(payload: CheckoutRequestDTO): Promise<CheckoutResponseDTO> {
+    const response = await fetch(`${API_BASE_URL}/checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || data.message || "Error al procesar la compra");
+    }
+
+    return data;
+  },
 };
+

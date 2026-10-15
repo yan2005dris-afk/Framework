@@ -2,51 +2,65 @@
 package controllers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"strconv"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"multicatalogo-backend/config"
 	"multicatalogo-backend/models"
 	"multicatalogo-backend/repository"
 )
 
+// ProductoController maneja las peticiones sobre el catálogo de productos con DI.
+type ProductoController struct {
+	dbRepo    repository.DatabaseRepository
+	cacheRepo repository.CacheRepository
+}
+
+// NewProductoController crea una instancia de ProductoController.
+func NewProductoController(dbRepo repository.DatabaseRepository, cacheRepo repository.CacheRepository) *ProductoController {
+	return &ProductoController{
+		dbRepo:    dbRepo,
+		cacheRepo: cacheRepo,
+	}
+}
+
 // GetProductos retorna la lista completa de productos desde la base de datos con Cache-Aside.
-func GetProductos(c *fiber.Ctx) error {
-	ctx := context.Background()
+func (pc *ProductoController) GetProductos(c *fiber.Ctx) error {
 	cacheKey := "productos:all"
 
 	// 1. Intentar leer desde Redis (Cache Hit)
-	cachedData, err := config.RedisClient.Get(ctx, cacheKey).Bytes()
-	if err == nil {
-		var productos []models.Producto
-		if err := json.Unmarshal(cachedData, &productos); err == nil {
-			return c.JSON(productos)
+	if pc.cacheRepo != nil {
+		cachedData, err := pc.cacheRepo.Get(cacheKey)
+		if err == nil {
+			var productos []models.Producto
+			if err := json.Unmarshal(cachedData, &productos); err == nil {
+				return c.JSON(productos)
+			}
 		}
 	}
 
 	// 2. Cache Miss: consultar PostgreSQL
-	productos, err := repository.ObtenerProductos()
+	productos, err := pc.dbRepo.ObtenerProductos()
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Error al obtener productos",
 		})
 	}
 
-	// 3. Guardar en Redis con TTL de 5 minutos
-	data, err := json.Marshal(productos)
-	if err == nil {
-		config.RedisClient.Set(ctx, cacheKey, data, 5*time.Minute)
+	// 3. Guardar en Redis con TTL de 5 minutos (300 segundos)
+	if pc.cacheRepo != nil {
+		data, err := json.Marshal(productos)
+		if err == nil {
+			_ = pc.cacheRepo.Set(cacheKey, data, 300)
+		}
 	}
 
 	return c.JSON(productos)
 }
 
 // GetProductoByID retorna un único producto según el parámetro de ruta ID.
-func GetProductoByID(c *fiber.Ctx) error {
+func (pc *ProductoController) GetProductoByID(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
@@ -55,7 +69,7 @@ func GetProductoByID(c *fiber.Ctx) error {
 		})
 	}
 
-	producto, err := repository.ObtenerProductoPorID(id)
+	producto, err := pc.dbRepo.ObtenerProductoPorID(id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -68,4 +82,15 @@ func GetProductoByID(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(producto)
+}
+
+// Funciones globales para compatibilidad hacia atrás
+func GetProductos(c *fiber.Ctx) error {
+	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{})
+	return ctrl.GetProductos(c)
+}
+
+func GetProductoByID(c *fiber.Ctx) error {
+	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{})
+	return ctrl.GetProductoByID(c)
 }

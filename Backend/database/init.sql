@@ -28,6 +28,28 @@ CREATE TABLE IF NOT EXISTS referidos (
     parent_id INT REFERENCES referidos(id) ON DELETE CASCADE
 );
 
+-- 4. Tabla pedidos
+CREATE TABLE IF NOT EXISTS pedidos (
+    id SERIAL PRIMARY KEY,
+    usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    nombre_cliente VARCHAR(255) NOT NULL,
+    email_cliente VARCHAR(255) NOT NULL,
+    metodo_pago VARCHAR(50) NOT NULL,
+    total NUMERIC(10, 2) NOT NULL,
+    estado VARCHAR(50) NOT NULL DEFAULT 'completado',
+    creado_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. Tabla pedido_items
+CREATE TABLE IF NOT EXISTS pedido_items (
+    id SERIAL PRIMARY KEY,
+    pedido_id INT NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+    producto_id INT NOT NULL REFERENCES productos(id),
+    cantidad INT NOT NULL,
+    precio_unitario NUMERIC(10, 2) NOT NULL,
+    subtotal NUMERIC(10, 2) NOT NULL
+);
+
 -- Datos semilla: usuarios
 INSERT INTO usuarios (id, email, password, rol) VALUES
 (1, 'admin@upse.edu.ec', '123456', 'admin'),
