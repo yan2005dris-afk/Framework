@@ -35,9 +35,16 @@ func main() {
 	dbRepo := repository.NewPostgresRepository(dbPool)
 	cacheRepo := repository.NewRedisCacheRepository(redisClient)
 
-	// Variables de entorno de seguridad (U2-T4).
-	// JWT_SECRET se carga de env; si está vacío usa un placeholder de desarrollo.
-	jwtSecret := os.Getenv("JWT_SECRET")
+	// Variables de entorno de seguridad (U2-T4 + GA5).
+	// Post-GA5 el Backend NO firma JWTs localmente, pero igual valida
+	// tokens via middleware.RequireAuth (defensa en profundidad), asi que
+	// sigue necesitando el secret. AUTH_JWT_SECRET y JWT_SECRET son
+	// equivalentes; preferimos AUTH_JWT_SECRET por consistencia con el
+	// auth-service.
+	jwtSecret := os.Getenv("AUTH_JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = os.Getenv("JWT_SECRET")
+	}
 	appEnv := os.Getenv("APP_ENV")
 	if appEnv == "" {
 		appEnv = "dev"
@@ -52,8 +59,17 @@ func main() {
 		corsOrigins = "http://localhost:5173"
 	}
 
+	// AUTH_SERVICE_URL: URL del auth-service para que los handlers
+	// /api/login, /api/logout, /api/refresh proxyen. En compose es
+	// http://auth-service:3001 (resoluble por DNS Docker). En dev
+	// nativo, http://localhost:3001.
+	authServiceURL := os.Getenv("AUTH_SERVICE_URL")
+	if authServiceURL == "" {
+		authServiceURL = "http://auth-service:3001"
+	}
+
 	// Instanciación de controladores con dependencias inyectadas
-	authCtrl := controllers.NewAuthController(dbRepo, jwtSecret, appEnv)
+	authCtrl := controllers.NewAuthController(authServiceURL)
 	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo, appEnv)
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo, appEnv)
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, appEnv)

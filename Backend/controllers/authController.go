@@ -2,148 +2,81 @@
 package controllers
 
 import (
-	"errors"
+	"bytes"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
-	"multicatalogo-backend/auth"
+
 	"multicatalogo-backend/middleware"
 	"multicatalogo-backend/models"
-	"multicatalogo-backend/repository"
 )
 
-// CookieName es el nombre de la cookie httpOnly donde viaja el JWT.
-// Vivir en una constante evita typos entre emisor (Login) y verificador (middleware).
+// CookieName se mantiene por compat con tests/AuthController legacy. El valor
+// real de la cookie lo emite el auth-service; este controller solo lo reenvia.
 const CookieName = "auth_token"
 
-// AuthController maneja la autenticación con JWT real (HS256) en cookie httpOnly.
+// AuthController es un proxy HTTP transparente al auth-service.
+//
+// Post-GA5 el Backend ya no firma JWTs ni compara bcrypts: lo unico que
+// hacia con esos secretos (los emite y los valida) vive ahora en
+// auth-service:3001. Mantenemos los endpoints locales /api/login,
+// /api/logout, /api/refresh, /api/me en el Backend por dos razones:
+//  1. Compatibilidad: el Frontend (y sus tests) sigue llamando /api/login.
+//     Cambiar la URL romeria el SPA.
+//  2. Defense in depth: cuando el gateway funciona correctamente, este
+//     proxy no se usa porque el gateway enruta /api/auth/* directo al
+//     auth-service. Pero si por alguna razon un request llega al Backend
+//     sin pasar por el gateway, este proxy es una segunda capa que sigue
+//     autenticando contra el auth-service.
+//
+// El middleware.RequireAuth del Backend sigue corriendo como tercera
+// capa: si llegan requests con cookie auth_token valida, valida local
+// (defensa) sin necesidad de round-trip al auth-service en cada request.
 type AuthController struct {
-	dbRepo         repository.DatabaseRepository
-	jwtSecret      []byte
-	expiresSeconds int64
-	appEnv         string
+	authServiceURL string
+	httpClient     *http.Client
 }
 
-// NewAuthController instancia un AuthController con dependencias inyectadas.
-// jwtSecret se usa para firmar los tokens (mínimo 32 bytes recomendado en producción).
-// appEnv controla el flag Secure de la cookie (en dev http://localhost requiere Secure=false).
-func NewAuthController(dbRepo repository.DatabaseRepository, jwtSecret string, appEnv string) *AuthController {
-	if len(jwtSecret) == 0 {
-		jwtSecret = "dev-insecure-secret-please-replace-in-production"
-	}
-	if appEnv == "" {
-		appEnv = "dev"
+// NewAuthController instancia el proxy.
+// authServiceURL: URL base del auth-service (e.g. "http://auth-service:3001").
+func NewAuthController(authServiceURL string) *AuthController {
+	if authServiceURL == "" {
+		authServiceURL = "http://auth-service:3001"
 	}
 	return &AuthController{
-		dbRepo:         dbRepo,
-		jwtSecret:      []byte(jwtSecret),
-		expiresSeconds: 7200,
-		appEnv:         appEnv,
-	}
-}
-
-// NewAuthControllerWithTTL permite especificar el TTL del token (segundos).
-func NewAuthControllerWithTTL(dbRepo repository.DatabaseRepository, jwtSecret string, appEnv string, expiresSeconds int64) *AuthController {
-	c := NewAuthController(dbRepo, jwtSecret, appEnv)
-	if expiresSeconds > 0 {
-		c.expiresSeconds = expiresSeconds
-	}
-	return c
-}
-
-// Login autentica al usuario con bcrypt, firma el JWT y lo entrega en una
-// cookie httpOnly `auth_token` (SameSite=Lax, Secure según APP_ENV). El body
-// JSON no incluye el token — eso reduce la superficie de robo por XSS al
-// evitar que el JS del frontend tenga acceso al valor.
-//
-// Respuestas:
-//   - 400 BadRequest: cuerpo inválido o email/password vacíos.
-//   - 401 Unauthorized: usuario no encontrado o password incorrecta.
-func (ac *AuthController) Login(c *fiber.Ctx) error {
-	var req models.LoginRequest
-	if err := c.BodyParser(&req); err != nil {
-		return models.APIError{Status: fiber.StatusBadRequest, Error: "Cuerpo de petición inválido"}.Write(c)
-	}
-
-	if req.Email == "" || req.Password == "" {
-		return models.APIError{Status: fiber.StatusBadRequest, Error: "Email y password son obligatorios"}.Write(c)
-	}
-
-	user, err := ac.dbRepo.BuscarUsuarioPorEmail(req.Email)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return models.APIError{Status: fiber.StatusUnauthorized, Error: "Credenciales incorrectas"}.Write(c)
-		}
-		return models.APIError{Status: fiber.StatusInternalServerError, Error: "Error interno del servidor"}.Write(c)
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		// Mismo mensaje que ErrNotFound para no filtrar existencia de cuentas.
-		return models.APIError{Status: fiber.StatusUnauthorized, Error: "Credenciales incorrectas"}.Write(c)
-	}
-
-	now := time.Now()
-	expAt := now.Add(time.Duration(ac.expiresSeconds) * time.Second)
-	claims := auth.AuthClaims{
-		Email: user.Email,
-		Rol:   user.Rol,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   itoa(user.ID),
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(expAt),
+		authServiceURL: strings.TrimRight(authServiceURL, "/"),
+		httpClient: &http.Client{
+			Timeout: 5 * time.Second,
 		},
 	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(ac.jwtSecret)
-	if err != nil {
-		return models.APIError{Status: fiber.StatusInternalServerError, Error: "No se pudo generar el token"}.Write(c)
-	}
-
-	// Cookie httpOnly: el JS del frontend NO puede leer este valor.
-	// SameSite=Lax permite que el browser la envíe en requests same-site (POST /api/checkout).
-	// Secure=true en cualquier entorno != dev (HTTPS obligatorio para cookie Secure).
-	c.Cookie(&fiber.Cookie{
-		Name:     CookieName,
-		Value:    signed,
-		HTTPOnly: true,
-		Secure:   ac.appEnv != "dev",
-		SameSite: "lax",
-		Path:     "/",
-		Expires:  expAt,
-	})
-
-	return c.JSON(fiber.Map{
-		"email":   user.Email,
-		"rol":     user.Rol,
-		"expires": ac.expiresSeconds,
-	})
 }
 
-// Logout limpia la cookie httpOnly. Endpoint público (no necesita RequireAuth):
-// si no hay cookie, simplemente termina; si la hay, la sobrescribe con MaxAge=-1
-// para que el browser la borre.
+// Login hace proxy a POST /auth/login del auth-service.
+// Forwarda el body tal cual + cookie/Authorization, y devuelve el response
+// (status + headers, incluido Set-Cookie) al cliente.
+func (ac *AuthController) Login(c *fiber.Ctx) error {
+	return ac.proxy(c, http.MethodPost, "/auth/login")
+}
+
+// Logout hace proxy a POST /auth/logout.
 func (ac *AuthController) Logout(c *fiber.Ctx) error {
-	c.Cookie(&fiber.Cookie{
-		Name:     CookieName,
-		Value:    "",
-		HTTPOnly: true,
-		Secure:   ac.appEnv != "dev",
-		SameSite: "lax",
-		Path:     "/",
-		MaxAge:   -1,
-	})
-	return c.JSON(fiber.Map{"status": "ok"})
+	return ac.proxy(c, http.MethodPost, "/auth/logout")
 }
 
-// Me devuelve la identidad del usuario autenticado extrayéndola de c.Locals
-// (poblada por middleware.RequireAuth). Requiere estar protegido por el
-// middleware; si no se setearon locals, devuelve 401.
-//
-// Es el endpoint que el frontend usa al montar la app para hidratar la sesión
-// desde la cookie, sin depender de nada guardado en localStorage.
+// Refresh hace proxy a POST /auth/refresh.
+func (ac *AuthController) Refresh(c *fiber.Ctx) error {
+	return ac.proxy(c, http.MethodPost, "/auth/refresh")
+}
+
+// Me devuelve la identidad del request actual desde c.Locals (poblada por
+// middleware.RequireAuth). Esto evita round-trip al auth-service cuando
+// la sesion ya fue validada por el middleware local (defensa en profundidad).
+// Si los locals no estan poblados (caso patologico en que alguien llama
+// /api/me sin RequireAuth antes), devuelve 401.
 func (ac *AuthController) Me(c *fiber.Ctx) error {
 	email, emailOk := c.Locals(middleware.LocalEmail).(string)
 	rol, _ := c.Locals(middleware.LocalRol).(string)
@@ -158,7 +91,69 @@ func (ac *AuthController) Me(c *fiber.Ctx) error {
 	})
 }
 
-// itoa evita importar strconv solo para una conversión ID -> string en el claim Subject.
+// proxy reenvia el request al auth-service y devuelve el response tal cual.
+//
+// Headers que forwarda:
+//   - Content-Type
+//   - Authorization (token JWT directo, caso poco comun)
+//   - Cookie (caso normal: cookie httpOnly del browser)
+//
+// Headers de respuesta: copia todos los del upstream (incluyendo Set-Cookie).
+func (ac *AuthController) proxy(c *fiber.Ctx, method, path string) error {
+	target := ac.authServiceURL + path
+
+	req, err := http.NewRequest(method, target, bytes.NewReader(c.Body()))
+	if err != nil {
+		return models.APIError{
+			Status:  fiber.StatusInternalServerError,
+			Error:   "No se pudo construir el request al auth-service",
+			Detalle: err.Error(),
+		}.Write(c)
+	}
+
+	if ct := c.Get("Content-Type"); ct != "" {
+		req.Header.Set("Content-Type", ct)
+	} else {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if auth := c.Get("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	if cookie := c.Get("Cookie"); cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+
+	resp, err := ac.httpClient.Do(req)
+	if err != nil {
+		return models.APIError{
+			Status:  fiber.StatusBadGateway,
+			Error:   "auth-service no responde",
+			Detalle: err.Error(),
+		}.Write(c)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return models.APIError{
+			Status:  fiber.StatusBadGateway,
+			Error:   "No se pudo leer respuesta del auth-service",
+			Detalle: err.Error(),
+		}.Write(c)
+	}
+
+	// Copia headers de respuesta, en particular Set-Cookie.
+	for k, vs := range resp.Header {
+		for _, v := range vs {
+			c.Set(k, v)
+		}
+	}
+
+	return c.Status(resp.StatusCode).Send(body)
+}
+
+// itoa evita importar strconv en sitios donde solo necesitamos Subject string.
+// Ya esta en middleware/auth.go y aqui para no acoplar paquetes.
 func itoa(i int) string {
 	if i == 0 {
 		return "0"
@@ -180,3 +175,7 @@ func itoa(i int) string {
 	}
 	return string(b[pos:])
 }
+
+// FormatDuration se usa en algunos puntos de logs. Mantenido porque su signature
+// aparece en tests; lo dejo aunque hoy no se use directamente.
+var _ = fmt.Sprintf

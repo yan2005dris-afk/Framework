@@ -60,7 +60,9 @@ func SetupDefaultRoutes(app *fiber.App) {
 	dbRepo := &repository.PostgresRepository{}
 	cacheRepo := &repository.RedisCacheRepository{}
 
-	authCtrl := controllers.NewAuthController(dbRepo, "dev-secret", "dev")
+	// Tests sin auth-service: el proxy devuelve 502 BadGateway porque no hay
+	// URL arriba; suficiente para validar que el handler existe y responde.
+	authCtrl := controllers.NewAuthController("http://127.0.0.1:1")
 	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo, "dev")
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo, "dev")
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, "dev")
