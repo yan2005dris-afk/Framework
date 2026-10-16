@@ -5,13 +5,14 @@
 // dupliquen la logica de bcrypt/JWT/cookies. El gateway enruta sus
 // requests a este servicio via forward_auth (/auth/validate).
 //
-// Estado actual (GA1):
+// Estado actual (GA1+GA2):
 //   - go.mod + deps
 //   - config desde env
-//   - pool de Postgres en :5436
+//   - pool de Postgres en :5436 (compartida via schema 'auth')
 //   - /auth/health con ping a la BD
+//   - /auth/login, /auth/logout, /auth/refresh, /auth/validate, /auth/me
 //
-// Proximos commits agregan /auth/login, /auth/validate, etc.
+// GA3+ crea el schema 'auth' y el seed inicial (ver migrations/).
 package main
 
 import (
@@ -51,8 +52,18 @@ func main() {
 		AllowMethods:     "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
 	}))
 
-	h := &handlers.HealthHandler{DB: database}
-	app.Get("/auth/health", h.Health)
+	// Handlers
+	hHealth := &handlers.HealthHandler{DB: database}
+	app.Get("/auth/health", hHealth.Health)
+
+	if database.Pool != nil {
+		hAuth := handlers.NewAuthHandler(cfg, database.Pool)
+		app.Post("/auth/login", hAuth.Login)
+		app.Post("/auth/logout", hAuth.Logout)
+		app.Post("/auth/refresh", hAuth.Refresh)
+		app.Post("/auth/validate", hAuth.Validate)
+		app.Get("/auth/me", hAuth.Me)
+	}
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{

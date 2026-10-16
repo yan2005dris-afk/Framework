@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"auth-service/internal/config"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type DB struct {
