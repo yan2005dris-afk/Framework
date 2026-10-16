@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useCart } from "../../Context/CartContext";
+import { useCart } from "../../Context/useCart";
 import { api } from "../../services/api";
 
 interface DatosEnvio {

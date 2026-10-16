@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useCart } from "../../Context/CartContext";
+import { useCart } from "../../Context/useCart";
 
 /**
  * Vista de carrito de compras con control de cantidades, eliminación y resumen de pedido.

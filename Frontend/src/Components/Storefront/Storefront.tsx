@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../../Context/AuthContext";
+import { useAuth } from "../../Context/useAuth";
 import { getProductos } from "../../services/productosService";
 import { categorias, type Producto } from "../../data/productos";
 
