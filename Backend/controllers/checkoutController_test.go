@@ -18,7 +18,7 @@ type MockDatabaseRepository struct {
 	ActualizarComisionesFunc func(usuarioID int, totalPedido float64) error
 }
 
-func (m *MockDatabaseRepository) BuscarUsuarioPorCredenciales(email, password string) (*models.Usuario, error) {
+func (m *MockDatabaseRepository) BuscarUsuarioPorEmail(email string) (*models.Usuario, error) {
 	return nil, nil
 }
 func (m *MockDatabaseRepository) ObtenerProductos() ([]models.Producto, error) {

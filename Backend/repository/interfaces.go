@@ -7,7 +7,10 @@ import (
 
 // DatabaseRepository define los métodos requeridos para operaciones en la base de datos relacional.
 type DatabaseRepository interface {
-	BuscarUsuarioPorCredenciales(email, password string) (*models.Usuario, error)
+	// BuscarUsuarioPorEmail trae al usuario (incluido el hash bcrypt del password) por email.
+	// La verificación del password se hace con bcrypt.CompareHashAndPassword en el controller,
+	// nunca en SQL.
+	BuscarUsuarioPorEmail(email string) (*models.Usuario, error)
 	ObtenerProductos() ([]models.Producto, error)
 	ObtenerProductoPorID(id int) (*models.Producto, error)
 	ObtenerRed() (*models.Referido, error)

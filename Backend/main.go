@@ -35,8 +35,16 @@ func main() {
 	dbRepo := repository.NewPostgresRepository(dbPool)
 	cacheRepo := repository.NewRedisCacheRepository(redisClient)
 
+	// Variables de entorno de seguridad (U2-T4).
+	// JWT_SECRET se carga de env; si está vacío usa un placeholder de desarrollo.
+	jwtSecret := os.Getenv("JWT_SECRET")
+	appEnv := os.Getenv("APP_ENV")
+	if appEnv == "" {
+		appEnv = "dev"
+	}
+
 	// Instanciación de controladores con dependencias inyectadas
-	authCtrl := controllers.NewAuthController(dbRepo)
+	authCtrl := controllers.NewAuthController(dbRepo, jwtSecret)
 	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo)
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo)
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo)
@@ -63,7 +71,7 @@ func main() {
 		port = "8080"
 	}
 
-	fmt.Printf("🚀 Servidor Backend iniciado en http://localhost:%s\n", port)
+	fmt.Printf("🚀 Servidor Backend iniciado en http://localhost:%s (APP_ENV=%s)\n", port, appEnv)
 
 	if err := app.Listen(":" + port); err != nil {
 		log.Fatalf("Error al iniciar el servidor: %v", err)

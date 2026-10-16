@@ -17,44 +17,31 @@ func SetupRoutes(
 ) {
 	api := app.Group("/api")
 
-	// Estado del servidor
+	// Estado del servidor (endpoint package-level, sin estado mutable)
 	api.Get("/health", controllers.GetHealth)
 
 	// Autenticación
-	if authCtrl != nil {
-		api.Post("/login", authCtrl.Login)
-	} else {
-		api.Post("/login", controllers.Login)
-	}
+	api.Post("/login", authCtrl.Login)
 
 	// Catálogo de Productos
-	if prodCtrl != nil {
-		api.Get("/productos", prodCtrl.GetProductos)
-		api.Get("/productos/:id", prodCtrl.GetProductoByID)
-	} else {
-		api.Get("/productos", controllers.GetProductos)
-		api.Get("/productos/:id", controllers.GetProductoByID)
-	}
+	api.Get("/productos", prodCtrl.GetProductos)
+	api.Get("/productos/:id", prodCtrl.GetProductoByID)
 
 	// Red Multinivel
-	if redCtrl != nil {
-		api.Get("/red", redCtrl.GetRed)
-	} else {
-		api.Get("/red", controllers.GetRed)
-	}
+	api.Get("/red", redCtrl.GetRed)
 
 	// Checkout / Transacciones ACID (Fase 4)
-	if checkoutCtrl != nil {
-		api.Post("/checkout", checkoutCtrl.Checkout)
-	}
+	api.Post("/checkout", checkoutCtrl.Checkout)
 }
 
 // SetupDefaultRoutes permite inicializar rutas instanciando los repositorios por defecto.
+// Usa un secreto de JWT placeholder; en producción llamar a SetupRoutes directamente
+// pasando dependencias reales y el JWT_SECRET de env.
 func SetupDefaultRoutes(app *fiber.App) {
 	dbRepo := &repository.PostgresRepository{}
 	cacheRepo := &repository.RedisCacheRepository{}
 
-	authCtrl := controllers.NewAuthController(dbRepo)
+	authCtrl := controllers.NewAuthController(dbRepo, "dev-secret")
 	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo)
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo)
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo)
