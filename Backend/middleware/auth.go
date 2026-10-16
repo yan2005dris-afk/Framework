@@ -8,7 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
-	"multicatalogo-backend/controllers"
+	"multicatalogo-backend/auth"
 	"multicatalogo-backend/repository"
 )
 
@@ -47,7 +47,7 @@ func RequireAuth(cfg AuthConfig) fiber.Handler {
 		}
 
 		tokenStr := strings.TrimSpace(parts[1])
-		claims := &controllers.AuthClaims{}
+		claims := &auth.AuthClaims{}
 		_, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, errors.New("método de firma inesperado")

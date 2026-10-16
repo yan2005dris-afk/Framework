@@ -10,7 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
-	"multicatalogo-backend/controllers"
+	"multicatalogo-backend/auth"
 	"multicatalogo-backend/models"
 	"multicatalogo-backend/repository"
 )
@@ -41,7 +41,7 @@ func (s *stubDBRepo) ActualizarComisiones(int, float64) error { return nil }
 
 func signToken(t *testing.T, secret []byte, email, rol string, expiresAt time.Time) string {
 	t.Helper()
-	claims := controllers.AuthClaims{
+	claims := auth.AuthClaims{
 		Email: email,
 		Rol:   rol,
 		RegisteredClaims: jwt.RegisteredClaims{

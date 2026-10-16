@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"multicatalogo-backend/controllers/helpers"
 	"multicatalogo-backend/models"
 	"multicatalogo-backend/repository"
 )
@@ -15,13 +16,19 @@ import (
 type ProductoController struct {
 	dbRepo    repository.DatabaseRepository
 	cacheRepo repository.CacheRepository
+	appEnv    string
 }
 
 // NewProductoController crea una instancia de ProductoController.
-func NewProductoController(dbRepo repository.DatabaseRepository, cacheRepo repository.CacheRepository) *ProductoController {
+// appEnv controla la sanitización de errors: "dev" los expone, otro valor los oculta.
+func NewProductoController(dbRepo repository.DatabaseRepository, cacheRepo repository.CacheRepository, appEnv string) *ProductoController {
+	if appEnv == "" {
+		appEnv = "dev"
+	}
 	return &ProductoController{
 		dbRepo:    dbRepo,
 		cacheRepo: cacheRepo,
+		appEnv:    appEnv,
 	}
 }
 
@@ -43,9 +50,12 @@ func (pc *ProductoController) GetProductos(c *fiber.Ctx) error {
 	// 2. Cache Miss: consultar PostgreSQL
 	productos, err := pc.dbRepo.ObtenerProductos()
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Error al obtener productos",
-		})
+		public, detail := helpers.SanitizeErrorDetails(pc.appEnv, err)
+		resp := fiber.Map{"error": public}
+		if detail != "" {
+			resp["detalle"] = detail
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(resp)
 	}
 
 	// 3. Guardar en Redis con TTL de 5 minutos (300 segundos)
@@ -76,9 +86,12 @@ func (pc *ProductoController) GetProductoByID(c *fiber.Ctx) error {
 				"error": "Producto no encontrado",
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Error al consultar el producto",
-		})
+		public, detail := helpers.SanitizeErrorDetails(pc.appEnv, err)
+		resp := fiber.Map{"error": public}
+		if detail != "" {
+			resp["detalle"] = detail
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(resp)
 	}
 
 	return c.JSON(producto)
@@ -86,11 +99,11 @@ func (pc *ProductoController) GetProductoByID(c *fiber.Ctx) error {
 
 // Funciones globales para compatibilidad hacia atrás
 func GetProductos(c *fiber.Ctx) error {
-	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{})
+	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{}, "dev")
 	return ctrl.GetProductos(c)
 }
 
 func GetProductoByID(c *fiber.Ctx) error {
-	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{})
+	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{}, "dev")
 	return ctrl.GetProductoByID(c)
 }

@@ -45,9 +45,10 @@ func main() {
 
 	// Instanciación de controladores con dependencias inyectadas
 	authCtrl := controllers.NewAuthController(dbRepo, jwtSecret)
-	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo)
-	redCtrl := controllers.NewRedController(dbRepo, cacheRepo)
-	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo)
+	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo, appEnv)
+	redCtrl := controllers.NewRedController(dbRepo, cacheRepo, appEnv)
+	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, appEnv)
+	healthCtrl := controllers.NewHealthController(dbPool, redisClient)
 
 	app := fiber.New()
 
@@ -64,7 +65,7 @@ func main() {
 	}))
 
 	// Registramos las rutas inyectando los controladores
-	routes.SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl)
+	routes.SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl, healthCtrl, dbRepo, jwtSecret)
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -8,18 +8,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"multicatalogo-backend/auth"
 	"multicatalogo-backend/models"
 	"multicatalogo-backend/repository"
 )
-
-// AuthClaims representa los claims del JWT firmado por el backend.
-// sub = UsuarioID; email y rol se exponen para que el middleware
-// RequireAuth setee c.Locals sin volver a consultar la BD.
-type AuthClaims struct {
-	Email string `json:"email"`
-	Rol   string `json:"rol"`
-	jwt.RegisteredClaims
-}
 
 // AuthController maneja la autenticación de usuarios con JWT real (HS256) y verificación bcrypt.
 type AuthController struct {
@@ -95,7 +87,7 @@ func (ac *AuthController) Login(c *fiber.Ctx) error {
 	}
 
 	now := time.Now()
-	claims := AuthClaims{
+	claims := auth.AuthClaims{
 		Email: user.Email,
 		Rol:   user.Rol,
 		RegisteredClaims: jwt.RegisteredClaims{
