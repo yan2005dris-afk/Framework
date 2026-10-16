@@ -1,0 +1,7 @@
+# Caddy
+caddy_data/
+caddy_config/
+caddy_custom/
+
+# Docker
+Dockerfile.local
