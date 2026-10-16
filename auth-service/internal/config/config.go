@@ -23,6 +23,7 @@ type Config struct {
 	DBUser     string
 	DBPassword string
 	DBName     string
+	DBSchema   string
 }
 
 func Load() *Config {
@@ -32,17 +33,30 @@ func Load() *Config {
 		JWTSecret:      []byte(getEnv("AUTH_JWT_SECRET", "dev-insecure-secret-please-replace-in-production")),
 		JWTExpiresSecs: 7200,
 
+		// BD unica compartida con Backend y SaaS. El auth-service escribe
+		// solo en el schema 'auth'.
 		DBHost:     getEnv("AUTH_DB_HOST", "localhost"),
-		DBPort:     getEnv("AUTH_DB_PORT", "5436"),
+		DBPort:     getEnv("AUTH_DB_PORT", "5432"),
 		DBUser:     getEnv("AUTH_DB_USER", "postgres"),
 		DBPassword: getEnv("AUTH_DB_PASSWORD", "postgres"),
-		DBName:     getEnv("AUTH_DB_NAME", "multicatalogo_auth"),
+		DBName:     getEnv("AUTH_DB_NAME", "multicatalogo"),
+		// Schema que el auth-service posee y donde escribe. Los demas
+		// schemas (backend, saas) son read-only para este servicio.
+		DBSchema: getEnv("AUTH_DB_SCHEMA", "auth"),
 	}
 }
 
 // DSN para pgxpool (autenticacion por password).
+// El schema 'auth' se aplica por query (search_path) o por SET en cada
+// sesion — ver internal/db/db.go.
 func (c *Config) DSN() string {
 	return "postgres://" + c.DBUser + ":" + c.DBPassword + "@" + c.DBHost + ":" + c.DBPort + "/" + c.DBName + "?sslmode=disable"
+}
+
+// Schema que el servicio posee y donde escribe. Usado para setear
+// `search_path` por conexion o prefijar queries.
+func (c *Config) Schema() string {
+	return c.DBSchema
 }
 
 func getEnv(key, fallback string) string {
