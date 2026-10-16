@@ -67,7 +67,7 @@ func main() {
 	}))
 
 	// CORS con credenciales habilitadas (necesario para que la cookie httpOnly
-	// viaje en el cross-puerto dev 5173 → 8080). En producción no se acepta
+	// viaje en el cross-puerto dev 5173 → 3000). En producción no se acepta
 	// "*" como origen credencial.
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     corsOrigins,
@@ -81,7 +81,7 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "3000"
 	}
 
 	fmt.Printf("🚀 Servidor Backend iniciado en http://localhost:%s (APP_ENV=%s)\n", port, appEnv)
