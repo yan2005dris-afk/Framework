@@ -16,6 +16,8 @@ multicatalogo-backend
 # Environment
 .env
 .env.local
+# .env.example son contratos sin secretos; se commitean en Backend/ y Unidad3_SaaS/.
+!.env.example
 
 # Logs
 *.log
