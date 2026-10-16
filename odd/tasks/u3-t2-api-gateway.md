@@ -15,73 +15,90 @@ React SPA (:5173)
        |
    gateway/Caddy (:8080)             <- Caddy 2.x + forward_auth + headers X-User-*
        |
-       +---> auth-service/ (:3001)   <- nuevo: emision y validacion de JWTs
-       |       |                      endpoints: /auth/login, /auth/logout, /auth/refresh, /auth/validate
-       |       +-- PG propia :5436   <- solo `users` y `saas_users` (replica de la BD SaaS, o vista)
+       +---> auth-service/ (:3001)   <- emision y validacion de JWTs (escriben schema 'auth')
        |
-       +---> Backend/Go/Fiber (:3000)  <- B2C: catalogo+checkout+MLM. CONSUME auth-service para Login (en lugar de firmarlo el)
-       |                              Ya NO tiene su propia bcrypt/JWT; las passwords las pide a auth-service
+       +---> Backend/Go/Fiber (:3000)  <- B2C: catalogo+checkout+MLM (escriben schema 'backend')
        |
-       +---> Unidad3_SaaS/FastAPI (:8000)  <- SaaS: tenants+users+billing. CONSUME auth-service para su auth
-       |     |                            ya NO tiene su propio /api/saas/auth/*; consume el auth-service
-       |     +-- PG :5435
+       +---> Unidad3_SaaS/FastAPI (:8000)  <- SaaS: tenants+users+billing (escriben schema 'saas')
        |
        +---> Redis (:6379) compartido
+       |
+       +---> POSTGRES (:5432)          <- UNA sola instancia, esquemas separados
+              auth.users, auth.saas_users, auth.saas_tenants
+              backend.usuarios, backend.productos, backend.referidos, backend.pedidos, ...
+              saas.planes, saas.suscripciones (futuro)
 ```
 
-## Specs
+### Decisión arquitectónica clave (L7 operador): BD ÚNICA con schemas
+
+Decidido vs. una BD-por-servicio por simplicidad y terminabilidad en el semestre:
+
+- **Una sola BD Postgres en :5432** (la que ya usa el Backend).
+- Cada servicio **posee un schema** y escribe solo ahí:
+  - `auth-service` -> schema `auth` (users, saas_users, saas_tenants).
+  - `backend-service` -> schema `backend` (usuarios, productos, referidos, pedidos, pedido_items).
+  - `saas-service` -> schema `saas` (planes, suscripciones, futuras tablas tenant-scoped).
+- **FK cross-schema funcionan** en Postgres porque todos estan en la misma BD (`REFERENCES auth.users(id)`).
+- **Lectura cruzada** permitida via vistas controladas: por ejemplo, backend puede consultar `auth.users` para resolver el email del usuario autenticado sin escribir.
+- **Sync eliminado**: los usuarios viven una sola vez en `auth.users`. El `backend.usuarios` legacy queda como espejo (solo lectura) para no romper `Backend/repository/repository.go` actual que lo lee de `usuarios`. Migración futura: eliminar `backend.usuarios` y leer de `auth.users` via vista.
+- **Sync eliminado NO significa zero cambios**: el auth-service crea `auth.users` con los mismos seeds que `backend.usuarios` tiene hoy (admin@upse.edu.ec, cliente@upse.edu.ec con bcrypt), y la migración inicial del Backend se mantiene. Las dos tablas viven hasta que decidamos unificarlas via vista.
+
+## Specs (actualizado para BD única + schemas)
 
 ### Auth-service
 
-- **AS1** — Carpeta nueva `auth-service/` en la raíz con su propio `go.mod`, `main.go`, layout estándar (`controllers/`, `middleware/`, `models/`, `repository/`, `routes/`, `database/`, `migrations/`). Go 1.26, Fiber 2.x, pgx, golang-jwt/v5, bcrypt.
+- **AS1** — Carpeta nueva `auth-service/` en la raíz con su propio `go.mod`, `main.go`, layout estándar (`controllers/`, `middleware/`, `models/`, `repository/`, `routes/`, `internal/db/`). Go 1.26, Fiber 2.x, pgx, golang-jwt/v5, bcrypt.
 - **AS2** — Endpoints:
-  - `POST /auth/login` body `{email, password}` -> 200 con `{token, email, rol, expires}` + cookie `auth_token` httpOnly + cookie `saas_token` httpOnly para tenants con login unificado.
+  - `POST /auth/login` body `{email, password}` -> 200 con `{token, email, rol, expires}` + cookie `auth_token` httpOnly + cookie `saas_token` httpOnly si el usuario esta vinculado a un tenant SaaS.
   - `POST /auth/logout` limpia ambas cookies.
-  - `POST /auth/refresh` -> emite un token nuevo a partir de uno proximo a expirar (opcional).
-  - `POST /auth/validate` -> recibe `{Authorization: Bearer <jwt>` o cookie `auth_token` o `saas_token`} y devuelve 200 con headers-pretendientes: `X-User-Id`, `X-User-Email`, `X-User-Rol`, `X-Tenant-Id`, `X-Rol-Saas`. Devuelve 401 si token invalido/vencido. Usado por Caddy via `forward_auth`.
-  - `GET /auth/me` -> devuelve la identidad tomada del token (espejo del `/api/me` legacy).
-  - `GET /auth/health` -> healthcheck ping a su BD.
-- **AS3** — BD propia del auth-service (`auth_db` en :5436) con `users` (mirror de `usuarios` del Backend: `id`, `email`, `password hash bcrypt`, `rol`) y `saas_users` (mirror de `users_saas` + `tenant_id`). Mantiene sincronizadas con Backend/SaaS via migracion inicial (seed con los mismos usuarios demo). LA SINCRONIZACION OPERATIVA ES MANUAL en esta version (no hay CDC aun); una nota en el README lo dice.
-- **AS4** — Reusa `Backend/auth/claims.go` movido a un paquete neutral `auth/` interno del auth-service (o compartido via Go modules replace, pero por simpleza se duplica en `auth-service/auth/claims.go`).
-- **AS5** — Firma HS256 con `AUTH_JWT_SECRET` env (default igual a `JWT_SECRET` para compatibilidad). Claims B2C: `{sub, email, rol, iat, exp}`. Claims SaaS: `{sub, email, tenant_id, rol_saas, iat, exp}`.
-- **AS6** — Mantiene los cookies httpOnly `auth_token` (B2C) y `saas_token` (SaaS) con SameSite=Lax, Secure=(env!=dev). Una misma sesion fisicamente puede tener ambas si el usuario tiene cuentas en los dos sistemas.
+  - `POST /auth/refresh` -> emite un token nuevo (opcional).
+  - `POST /auth/validate` -> recibe el JWT (via header Authorization o cookie `auth_token`/`saas_token`) y devuelve 200 con los headers que Caddy pasa al upstream: `X-User-Id`, `X-User-Email`, `X-User-Rol`, `X-Tenant-Id`, `X-Rol-Saas`. 401 si invalido. Usado por Caddy via `forward_auth`.
+  - `GET /auth/me` -> identidad del token.
+  - `GET /auth/health` -> healthcheck ping a Postgres.
+- **AS3** — **Una sola BD Postgres** en :5432 (la del Backend). El auth-service escribe en schema `auth`:
+  - `auth.users (id, email, password_hash, rol, created_at)`: source-of-truth para login. Seed: `admin@upse.edu.ec` con bcrypt (`123456`), `cliente@upse.edu.ec` con bcrypt.
+  - `auth.saas_users (id, user_id FK auth.users, tenant_id FK auth.saas_tenants, email, hashed_password, rol_saas)` (futuro, en GA3 si lo hacemos).
+  - `auth.saas_tenants (id, slug UNIQUE, name, created_at)` (opcional, en GA3).
+- **AS4** — Reusa `Backend/auth/claims.go` movido a un paquete neutral `auth-service/auth/claims.go` (mismo codigo, paquete propio del servicio).
+- **AS5** — Firma HS256 con `AUTH_JWT_SECRET` env (default igual a `JWT_SECRET` del Backend para compatibilidad). Claims B2C: `{sub, email, rol, iat, exp}`. Claims SaaS: `{sub, email, tenant_id, rol_saas, iat, exp}`.
+- **AS6** — Cookies httpOnly `auth_token` (B2C) y `saas_token` (SaaS) con SameSite=Lax, Secure=(env!=dev).
 
 ### Gateway (Caddy)
 
-- **G1** — `gateway/Caddyfile` con `:8080` (host) manejando tres rutas:
-  - `/api/tx/*` -> reverse proxy `backend:3000` con `header_up X-Forwarded-*` y `forward_auth auth-service:3001` (validates B2C tokens).
-  - `/api/saas/*` -> reverse proxy `saas-api:8000` con `forward_auth auth-service:3001` (validates SaaS tokens con claim `tenant_id`).
-  - `/` y `/assets/*` -> `file_server` desde un volumen con el `dist/` del frontend (placeholder en U3-T2; el build real es U4).
-- **G2** — Cuando `forward_auth` falla (401), Caddy responde 401 directo sin pasar al backend. Cuando pasa (200), copia los headers `X-User-Id`, `X-User-Email`, `X-User-Rol`, `X-Tenant-Id`, `X-Rol-Saas` al request upstream para que el backend los lea.
+- **G1** — `gateway/Caddyfile` con `:8080`:
+  - `/api/tx/*` -> `backend:3000` con `forward_auth auth-service:3001`.
+  - `/api/saas/*` -> `saas-api:8000` con `forward_auth auth-service:3001`.
+  - `/` -> file_server (placeholder hasta U4 con SPA build).
+- **G2** — `forward_auth` falla -> 401 directo; pasa -> copia headers `X-User-*` al upstream.
 
 ### Backend (Go/Fiber, refactor mínimo)
 
-- **B1** — `Backend/controllers/authController.go` ahora hace HTTP al auth-service (en lugar de firmar local). Las cookies se setean en el auth-service y se devuelven al cliente via proxy pass-through.
-- **B2** — `Backend/middleware/auth.go` sigue existiendo como **defensa en profundidad**: si el gateway está caído o el path se accede internamente, RequireAuth corre su propia validacion HS256 contra `JWT_SECRET` (no depende del gateway). Es duplicación consciente: el gateway es la primera línea, el middleware es la segunda.
-- **B3** — `routes.go` elimina los handlers legacy de authController (`authCtrl.Login`, `authCtrl.Logout`, `authCtrl.Me`) y enruta esos paths como proxy al auth-service o los deja responded por el gateway.
-- **B4** — Los tests existentes (`controllers/authController_test.go`, `controllers/checkoutController_test.go`) siguen pasando porque el middleware RequireAuth no cambió.
+- **B1** — `Backend/controllers/authController.go` hace HTTP a `auth-service:3001/auth/login` (forwarda el body y devuelve la respuesta tal cual).
+- **B2** — `Backend/middleware/auth.go` se mantiene como **defensa en profundidad**: si el gateway está caído, RequireAuth corre su propia validacion HS256 contra `JWT_SECRET`. El gateway es la primera linea; el middleware la segunda.
+- **B3** — `routes.go` reemplaza los handlers locales `authCtrl.Login/Logout/Me` con un proxy reverso al `auth-service:3001`.
+- **B4** — Los tests existentes del Backend (`controllers/authController_test.go`, `controllers/checkoutController_test.go`) siguen pasando porque el middleware `RequireAuth` no cambia.
 
 ### SaaS (FastAPI)
 
-- **SA1** — `Unidad3_SaaS/app/api/auth.py` se convierte en cliente HTTP al auth-service (mismo patron que B1). Conserva la dependencia `passlib[bcrypt]` y `python-jose` solo si las signatures de JWT se localmente computan (no la decisión: emitir/validar via auth-service).
-- **SA2** — Tests actualizados: los smoke tests de `/health` siguen pasando; los nuevos tests de auth son contra el auth-service con mocks.
+- **SA1** — `Unidad3_SaaS/app/api/auth.py` se convierte en cliente HTTP a `auth-service:3001/auth/login`.
+- **SA2** — Tests de smoke de `/health` siguen pasando; nuevos tests de auth usan `httpx` AsyncClient mocking al auth-service.
 
 ### docker-compose raíz
 
-- **DC1** — Servicios: `gateway` (Caddy :8080 -> :8080 host), `auth-service` (:3001), `backend` (:3000), `saas-api` (:8000), `redis` (:6379), `db` (PG :5432 para Backend), `saas-db` (PG :5435 para SaaS), `auth-db` (PG :5436 para auth-service). 8 contenedores. Red interna Docker. Único puerto expuesto al host: 8080.
-- **DC2** — Variables de entorno centralizadas en `.env` raíz (o por servicio). Convencion: `AUTH_JWT_SECRET` (si es distinto de `JWT_SECRET`), `BACKEND_DB_*`, `SAAS_DB_*`, `AUTH_DB_*`, `REDIS_*`, `CORS_ORIGINS`, `APP_ENV`.
+- **DC1** — Servicios: `gateway` (Caddy :8080), `auth-service` (:3001), `backend` (:3000), `saas-api` (:8000), `redis` (:6379), `db` (Postgres :5432). **6 contenedores** en total (antes 8). Único puerto expuesto al host: 8080.
+- **DC2** — Variables de entorno centralizadas en `.env` raíz: `AUTH_JWT_SECRET`, `BACKEND_DB_*`, `SAAS_DB_*`, `REDIS_*`, `CORS_ORIGINS`, `APP_ENV`.
 
 ### Tests E2E
 
-- **E2E1** — `tests/e2e/gateway_e2e.py`: con `docker compose up -d`, secuencias curl/bash que verifican:
+- **E2E1** — `tests/e2e/gateway_e2e.sh`: con `docker compose up -d`, verifica:
   - `curl localhost:8080/api/tx/productos` -> 200 con el catálogo.
   - `curl localhost:8080/api/saas/health` -> 200 con JSON del SaaS.
-  - Login en backend con curl a `localhost:8080/api/login` setea cookie `auth_token` y devuelve token.
-  - Login en SaaS con curl a `localhost:8080/api/saas/auth/login` setea cookie `saas_token`.
-  - Request a `/api/tx/red` sin cookie -> 401.
-  - Request a `/api/saas/tenants` sin cookie -> 401.
-  - Request a `/api/saas/tenants` con `auth_token` B2C -> 401 (wrong token type).
-  - Request a `/api/saas/tenants` con `saas_token` rol_saas=superadmin -> 200 con lista.
+  - `curl -X POST localhost:8080/api/auth/login ...` -> setea cookie `auth_token` + `saas_token` si aplica.
+  - `curl -X POST localhost:8080/api/saas/auth/login ...` -> setea cookie `saas_token`.
+  - `curl localhost:8080/api/tx/red` sin cookie -> 401.
+  - `curl localhost:8080/api/saas/tenants` sin cookie -> 401.
+  - `curl localhost:8080/api/saas/tenants` con `auth_token` B2C -> 401 (wrong token type).
+  - `curl localhost:8080/api/saas/tenants` con `saas_token` rol_saas=superadmin -> 200 con lista.
 
 ## Tasks (work-unit commits)
 
@@ -110,4 +127,7 @@ Hay 8 unidades de commit. Cada una cierra un commit autocontenido.
 - **L3** (usuario, 2026-10-16): "y si mejoramos la arquitecutra teniendo un microservicio de la auth, un microservicio de los productos y etc".
 - **L4** (operador): full microservicios descartado por superficie; hibrido extractor solo auth-service.
 - **L5** (operador, 2026-10-16): "Go (consistente con Backend)".
-- **L6** (implementación, pendiente): GA1-GA8.
+- **L6** (operador, 2026-10-16): "aunque orita de momento no seamos purista de microservicio y usemos la misma base de datos o hagamos tablas foraneas entre diferentes base de dtos a ver que tal nos queda, o como manejamos en las otras base de datos de go de monilitico que hace? osea los usuarios como se sabe ahi que usuario hace pago o cosas asi" — decision: BD unica compartida con schemas separados.
+- **L7** (operador): opcion tecnica elegida "schemas compartidos".
+- **L8** (implementación): `2adf473` refactoriza GA1 para apuntar a la BD compartida en :5432/schema 'auth' en lugar de la BD propia :5436. Sigue siendo GA1 con la nueva decisión arquitectónica.
+- **L9** (implementación, pendiente): GA2-GA8.
