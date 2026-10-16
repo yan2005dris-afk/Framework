@@ -1,0 +1,68 @@
+# docker-compose para desarrollo local del SaaS.
+#
+# Levanta:
+#   - saas-db: Postgres 16-alpine en :5435 (NO choca con la BD del nucleo
+#     Go/Fiber del repo, que va en :5434).
+#   - saas-api: FastAPI en :8000, depende de saas-db healthy.
+#
+# Comandos utiles (desde Unidad3_SaaS/):
+#   docker compose up -d saas-db          # solo BD
+#   docker compose up --build             # BD + API
+#   docker compose logs -f saas-api
+#   docker compose down -v                # baja todo y BORRA el volumen
+#
+# Las variables se leen del .env (NO del shell). Si no existe .env,
+# podes copiar .env.example a .env primero.
+
+services:
+  saas-db:
+    image: postgres:16-alpine
+    container_name: multicatalogo-saas-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${SAAS_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${SAAS_DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${SAAS_DB_NAME:-multicatalogo_saas}
+    ports:
+      - "${SAAS_DB_PORT:-5435}:5432"
+    volumes:
+      - saas_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${SAAS_DB_USER:-postgres} -d ${SAAS_DB_NAME:-multicatalogo_saas}
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  saas-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multicatalogo-saas-api
+    restart: unless-stopped
+    depends_on:
+      saas-db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Sobrescribir el host para que apunte al servicio de docker compose,
+      # no a localhost del host.
+      APP_ENV: prod
+      SAAS_DB_HOST: saas-db
+      SAAS_DB_PORT: "5432"
+    ports:
+      - "8000:8000"
+    # Aplicar migraciones antes de arrancar uvicorn. Si la migracion falla,
+    # el contenedor se reinicia y reintenta.
+    command:
+      - sh
+      - -c
+      - |
+        uv run alembic upgrade head && \
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  saas_postgres_data:
+    name: multicatalogo_saas_postgres_data
