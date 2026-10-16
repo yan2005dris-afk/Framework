@@ -41,26 +41,18 @@ func NewCheckoutController(dbRepo repository.DatabaseRepository, cacheRepo repos
 func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 	var req models.CheckoutRequest
 	if err := ctx.BodyParser(&req); err != nil {
-		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Cuerpo de petición inválido",
-		})
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "Cuerpo de petición inválido"}.Write(ctx)
 	}
 
 	if len(req.Items) == 0 {
-		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "El carrito no contiene items",
-		})
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "El carrito no contiene items"}.Write(ctx)
 	}
 
 	// Validar cantidad por item ANTES de la transacción.
 	for _, item := range req.Items {
 		if item.Cantidad <= 0 {
 			public, detail := helpers.SanitizeErrorDetails(c.appEnv, repository.ErrCantidadInvalida)
-			resp := fiber.Map{"error": public}
-			if detail != "" {
-				resp["detalle"] = detail
-			}
-			return ctx.Status(fiber.StatusBadRequest).JSON(resp)
+			return models.APIError{Status: fiber.StatusBadRequest, Error: public, Detalle: detail}.Write(ctx)
 		}
 	}
 
@@ -68,9 +60,7 @@ func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 	usuarioIDVal, ok := ctx.Locals(middleware.LocalUsuarioID).(int)
 	if !ok {
 		// Fallback defensivo: si el middleware no corrió (test directo), devolvemos 401.
-		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Autenticación requerida",
-		})
+		return models.APIError{Status: fiber.StatusUnauthorized, Error: "Autenticación requerida"}.Write(ctx)
 	}
 	tokenEmail, _ := ctx.Locals(middleware.LocalEmail).(string)
 
@@ -85,16 +75,10 @@ func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 	if err != nil {
 		log.Printf("❌ Error en transacción de checkout: %v", err)
 		public, detail := helpers.SanitizeErrorDetails(c.appEnv, err)
-		resp := fiber.Map{
-			"error": "Error al procesar el pedido. Transacción revertida.",
+		if public == "" {
+			public = "Error al procesar el pedido. Transacción revertida."
 		}
-		if public != "" {
-			resp["error"] = public
-		}
-		if detail != "" {
-			resp["detalle"] = detail
-		}
-		return ctx.Status(fiber.StatusInternalServerError).JSON(resp)
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: public, Detalle: detail}.Write(ctx)
 	}
 
 	// Paso 4: Concurrencia con Goroutine en segundo plano (Misión Crítica)

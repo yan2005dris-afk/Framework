@@ -1,6 +1,8 @@
 // Package models define las estructuras de datos utilizadas en la aplicación.
 package models
 
+import "github.com/gofiber/fiber/v2"
+
 // LoginRequest define el cuerpo esperado para la autenticación de usuarios.
 type LoginRequest struct {
 	Email    string `json:"email"`
@@ -27,10 +29,38 @@ type Producto struct {
 }
 
 // APIError estandariza los mensajes de error HTTP de la API.
+//
+// Status es el codigo HTTP a retornar y NO se serializa en el body
+// porque el cliente ya lo recibe en la response line. Solo Error y
+// Detalle (este ultimo opcional) llegan al JSON, manteniendo el shape
+// esperado por el frontend (`{"error": "...", "detalle": "..."}`).
+//
+// Use el metodo Write para responder consistentemente desde un controller:
+//
+//	return models.APIError{Status: 400, Error: "Cuerpo invalido"}.Write(c)
 type APIError struct {
-	Status  int         `json:"status"`
-	Message string      `json:"message"`
-	Details interface{} `json:"details,omitempty"`
+	Status  int
+	Error   string
+	Detalle interface{}
+}
+
+// Write serializa el error como JSON con el codigo HTTP correspondiente.
+// Si Detalle es nil o string vacio se omite del body (regla de omitempty
+// manejada manualmente para mantener el shape `{error, detalle?}` estable
+// independientemente del tipo de Detalle).
+func (e APIError) Write(c *fiber.Ctx) error {
+	body := fiber.Map{"error": e.Error}
+	if e.Detalle != nil {
+		switch v := e.Detalle.(type) {
+		case string:
+			if v != "" {
+				body["detalle"] = v
+			}
+		default:
+			body["detalle"] = v
+		}
+	}
+	return c.Status(e.Status).JSON(body)
 }
 
 // Referido define la estructura jerárquica de un miembro en la red multinivel.
