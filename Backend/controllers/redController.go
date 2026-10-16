@@ -50,16 +50,10 @@ func (rc *RedController) GetRed(c *fiber.Ctx) error {
 	red, err := rc.dbRepo.ObtenerRed()
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Estructura de red no encontrada",
-			})
+			return models.APIError{Status: fiber.StatusNotFound, Error: "Estructura de red no encontrada"}.Write(c)
 		}
 		public, detail := helpers.SanitizeErrorDetails(rc.appEnv, err)
-		resp := fiber.Map{"error": public}
-		if detail != "" {
-			resp["detalle"] = detail
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(resp)
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: public, Detalle: detail}.Write(c)
 	}
 
 	// 3. Guardar en Redis con TTL de 10 minutos (600 segundos)

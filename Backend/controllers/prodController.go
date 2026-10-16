@@ -74,9 +74,7 @@ func (pc *ProductoController) GetProductoByID(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := strconv.Atoi(idParam)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "El ID del producto debe ser numérico",
-		})
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "El ID del producto debe ser numérico"}.Write(c)
 	}
 
 	producto, err := pc.dbRepo.ObtenerProductoPorID(id)

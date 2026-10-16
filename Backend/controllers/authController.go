@@ -64,34 +64,24 @@ func NewAuthControllerWithTTL(dbRepo repository.DatabaseRepository, jwtSecret st
 func (ac *AuthController) Login(c *fiber.Ctx) error {
 	var req models.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Cuerpo de petición inválido",
-		})
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "Cuerpo de petición inválido"}.Write(c)
 	}
 
 	if req.Email == "" || req.Password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Email y password son obligatorios",
-		})
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "Email y password son obligatorios"}.Write(c)
 	}
 
 	user, err := ac.dbRepo.BuscarUsuarioPorEmail(req.Email)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Credenciales incorrectas",
-			})
+			return models.APIError{Status: fiber.StatusUnauthorized, Error: "Credenciales incorrectas"}.Write(c)
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Error interno del servidor",
-		})
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: "Error interno del servidor"}.Write(c)
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		// Mismo mensaje que ErrNotFound para no filtrar existencia de cuentas.
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Credenciales incorrectas",
-		})
+		return models.APIError{Status: fiber.StatusUnauthorized, Error: "Credenciales incorrectas"}.Write(c)
 	}
 
 	now := time.Now()
@@ -109,9 +99,7 @@ func (ac *AuthController) Login(c *fiber.Ctx) error {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(ac.jwtSecret)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "No se pudo generar el token",
-		})
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: "No se pudo generar el token"}.Write(c)
 	}
 
 	// Cookie httpOnly: el JS del frontend NO puede leer este valor.
@@ -161,9 +149,7 @@ func (ac *AuthController) Me(c *fiber.Ctx) error {
 	rol, _ := c.Locals(middleware.LocalRol).(string)
 	usuarioID, _ := c.Locals(middleware.LocalUsuarioID).(int)
 	if !emailOk || email == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "No autenticado",
-		})
+		return models.APIError{Status: fiber.StatusUnauthorized, Error: "No autenticado"}.Write(c)
 	}
 	return c.JSON(fiber.Map{
 		"id":    usuarioID,
