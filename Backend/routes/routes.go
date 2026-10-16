@@ -25,27 +25,33 @@ func SetupRoutes(
 	// Estado del servidor (público; hace ping real a PG y Redis)
 	api.Get("/health", healthCtrl.Health)
 
-	// Autenticación (pública)
-	api.Post("/login", authCtrl.Login)
-
 	// Catálogo de Productos (público)
 	api.Get("/productos", prodCtrl.GetProductos)
 	api.Get("/productos/:id", prodCtrl.GetProductoByID)
 
-	// Rutas protegidas con JWT (Authorization: Bearer <token>).
-	// El middleware parsea el token, setea c.Locals y, si DBRepo no es nil,
-	// hidrata el usuarioID desde la BD para que el checkout pueda usarlo
-	// como identidad (ignora emailCliente del body).
-	auth := middleware.RequireAuth(middleware.AuthConfig{
+	// Autenticación (pública)
+	api.Post("/login", authCtrl.Login)
+	api.Post("/logout", authCtrl.Logout)
+
+	// Middleware de proteccion con JWT. Lee el token desde el header
+	// `Authorization: Bearer <jwt>` (override) o desde la cookie httpOnly
+	// `auth_token` (caso normal del flujo SPA). Setea c.Locals con email,
+	// rol y (si DBRepo no es nil) usuarioID.
+	requireAuth := middleware.RequireAuth(middleware.AuthConfig{
 		JWTSecret: []byte(jwtSecret),
 		DBRepo:    dbRepo,
 	})
 
+	// Hidratación de sesión desde cookie httpOnly (protegido).
+	// El frontend lo llama al montar la app para saber si hay sesión activa
+	// sin depender de localStorage.
+	api.Get("/me", requireAuth, authCtrl.Me)
+
 	// Red Multinivel (protegida)
-	api.Get("/red", auth, redCtrl.GetRed)
+	api.Get("/red", requireAuth, redCtrl.GetRed)
 
 	// Checkout / Transacciones ACID (protegido)
-	api.Post("/checkout", auth, checkoutCtrl.Checkout)
+	api.Post("/checkout", requireAuth, checkoutCtrl.Checkout)
 }
 
 // SetupDefaultRoutes permite inicializar rutas instanciando los repositorios y controllers
@@ -54,7 +60,7 @@ func SetupDefaultRoutes(app *fiber.App) {
 	dbRepo := &repository.PostgresRepository{}
 	cacheRepo := &repository.RedisCacheRepository{}
 
-	authCtrl := controllers.NewAuthController(dbRepo, "dev-secret")
+	authCtrl := controllers.NewAuthController(dbRepo, "dev-secret", "dev")
 	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo, "dev")
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo, "dev")
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, "dev")

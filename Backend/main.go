@@ -43,8 +43,17 @@ func main() {
 		appEnv = "dev"
 	}
 
+	// CORS_ORIGINS lista separada por comas de orígenes permitidos.
+	// El default es el dev server de Vite; en producción hay que setearlo
+	// explícitamente. AllowCredentials=true es obligatorio para que las
+	// cookies httpOnly viajen desde el frontend.
+	corsOrigins := os.Getenv("CORS_ORIGINS")
+	if corsOrigins == "" {
+		corsOrigins = "http://localhost:5173"
+	}
+
 	// Instanciación de controladores con dependencias inyectadas
-	authCtrl := controllers.NewAuthController(dbRepo, jwtSecret)
+	authCtrl := controllers.NewAuthController(dbRepo, jwtSecret, appEnv)
 	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo, appEnv)
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo, appEnv)
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, appEnv)
@@ -57,11 +66,14 @@ func main() {
 		Format: "[${time}] ${status} - ${method} ${path}\n",
 	}))
 
-	// Implementamos el middleware CORS a nivel global
+	// CORS con credenciales habilitadas (necesario para que la cookie httpOnly
+	// viaje en el cross-puerto dev 5173 → 8080). En producción no se acepta
+	// "*" como origen credencial.
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
+		AllowOrigins:     corsOrigins,
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowMethods:     "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
+		AllowCredentials: true,
 	}))
 
 	// Registramos las rutas inyectando los controladores

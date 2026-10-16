@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useCart } from "../../Context/CartContext";
-import { useAuth } from "../../Context/AuthContext";
+import { useCart } from "../../Context/useCart";
+import { useAuth } from "../../Context/useAuth";
 import { Icon } from "../Share/Icon";
 
 interface NavbarProps {

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProductoById } from "../../services/productosService";
 import type { Producto } from "../../data/productos";
-import { useCart } from "../../Context/CartContext";
+import { useCart } from "../../Context/useCart";
 
 /**
  * Vista de detalle de producto con selector de galería y visualizador Lightbox interactivo.

@@ -1,12 +1,16 @@
-import type { Rol } from "../Context/AuthContext";
 import type { Producto } from "../data/productos";
-
-export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
+import { ApiError, apiFetch } from "./http";
 
 export interface LoginResponse {
-  token: string;
   email: string;
-  rol: Rol;
+  rol: "admin" | "cliente";
+  expires: number;
+}
+
+export interface MeResponse {
+  id: number;
+  email: string;
+  rol: "admin" | "cliente";
 }
 
 export interface CheckoutItemDTO {
@@ -33,75 +37,84 @@ export interface CheckoutResponseDTO {
 }
 
 /**
- * Cliente centralizado para servicios de API.
+ * Cliente de API. Toda llamada pasa por `apiFetch` con credenciales para
+ * que el browser adjunte automáticamente la cookie `auth_token`.
+ *
+ * El token YA NO se devuelve en el body: viaja únicamente en la cookie
+ * httpOnly configurada por el backend. Eso elimina la posibilidad de
+ * robo por XSS.
  */
 export const api = {
   /**
-   * Realiza la autenticación del usuario mediante credenciales.
-   * @param {string} email - Correo del usuario.
-   * @param {string} password - Contraseña.
-   * @returns {Promise<LoginResponse>} Objeto con token, email y rol.
+   * POST /api/login
+   * Devuelve {email, rol, expires}. La cookie httpOnly llega en el header
+   * Set-Cookie del response.
    */
-  async login(email: string, password: string): Promise<LoginResponse> {
-    const response = await fetch(`${API_BASE_URL}/login`, {
+  login(email: string, password: string, onUnauthorized?: () => void): Promise<LoginResponse> {
+    return apiFetch<LoginResponse>("/login", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email, password }),
+      json: { email, password },
+      onUnauthorized,
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || "Error al iniciar sesión");
-    }
-
-    return data;
   },
 
   /**
-   * Obtiene el listado de productos del catálogo.
-   * @returns {Promise<Producto[]>} Listado de productos.
+   * POST /api/logout
+   * Limpia la cookie httpOnly en el backend. Idempotente: si no había
+   * cookie, sigue respondiendo 200 OK.
    */
-  async getProductos(): Promise<Producto[]> {
-    const response = await fetch(`${API_BASE_URL}/productos`, {
+  logout(onUnauthorized?: () => void): Promise<{ status: string }> {
+    return apiFetch<{ status: string }>("/logout", {
+      method: "POST",
+      onUnauthorized,
+    });
+  },
+
+  /**
+   * GET /api/me
+   * Endpoint protegido que devuelve la identidad leída desde la cookie.
+   * El frontend lo llama al montar la app para hidratar la sesión.
+   * Si la cookie no está o expiró, lanza ApiError con status 401.
+   */
+  me(onUnauthorized?: () => void): Promise<MeResponse> {
+    return apiFetch<MeResponse>("/me", {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
+      onUnauthorized,
     });
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || "Error al obtener productos");
-    }
-
-    return response.json();
   },
 
   /**
-   * Procesa la orden de compra a través del endpoint transaccional ACID del backend.
-   * @param {CheckoutRequestDTO} payload - Datos de la compra y artículos del carrito.
-   * @returns {Promise<CheckoutResponseDTO>} Resultado del pedido confirmado.
+   * GET /api/productos
+   * Catálogo completo desde el backend con Cache-Aside.
    */
-  async checkout(payload: CheckoutRequestDTO): Promise<CheckoutResponseDTO> {
-    const response = await fetch(`${API_BASE_URL}/checkout`, {
+  getProductos(): Promise<Producto[]> {
+    return apiFetch<Producto[]>("/productos", { method: "GET" });
+  },
+
+  /**
+   * GET /api/red
+   * Árbol multinivel. Requiere cookie httpOnly válida.
+   */
+  getRed(onUnauthorized?: () => void): Promise<unknown> {
+    return apiFetch<unknown>("/red", { method: "GET", onUnauthorized });
+  },
+
+  /**
+   * POST /api/checkout
+   * Checkout transaccional ACID. La identidad del usuario se toma del JWT
+   * en la cookie; el campo emailCliente del body es sobrescrito por el
+   * backend con el email del token antes de la transacción.
+   */
+  checkout(
+    payload: CheckoutRequestDTO,
+    onUnauthorized?: () => void
+  ): Promise<CheckoutResponseDTO> {
+    return apiFetch<CheckoutResponseDTO>("/checkout", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
+      json: payload,
+      onUnauthorized,
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || data.message || "Error al procesar la compra");
-    }
-
-    return data;
   },
 };
 
+export { ApiError };

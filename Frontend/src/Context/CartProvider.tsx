@@ -1,50 +1,16 @@
-/* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Producto } from "../data/productos";
-import { useAuth } from "./AuthContext";
-
-/**
- * Elemento del carrito que incluye los datos del producto y su cantidad seleccionada.
- */
-export interface CartItem extends Producto {
-  cantidad: number;
-}
-
-interface CartContextType {
-  cart: CartItem[];
-  addToCart: (producto: Producto) => void;
-  removeFromCart: (id: number) => void;
-  incrementQuantity: (id: number) => void;
-  decrementQuantity: (id: number) => void;
-  clearCart: () => void;
-  totalItems: number;
-  totalPrice: number;
-}
+import { useAuth } from "./useAuth";
+import { CartContext, type CartItem, type CartContextType } from "./cart-context";
 
 const CART_STORAGE_PREFIX = "multicatalogo_carrito_";
 
-const CartContext = createContext<CartContextType | undefined>(undefined);
-
 /**
- * Hook para acceder al contexto del carrito de compras.
- * @returns {CartContextType} Contexto del carrito.
+ * CartProvider mantiene el carrito en estado local y lo persiste en
+ * localStorage bajo una clave por email de usuario, garantizando
+ * aislamiento entre cuentas.
  */
-export const useCart = (): CartContextType => {
-  const context = useContext(CartContext);
-  if (!context) {
-    throw new Error("useCart debe ser usado dentro de un CartProvider");
-  }
-  return context;
-};
-
-interface CartProviderProps {
-  children: ReactNode;
-}
-
-/**
- * Proveedor del carrito de compras con persistencia aislada por usuario en localStorage.
- */
-export const CartProvider = ({ children }: CartProviderProps) => {
+export const CartProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const storageKey = user
     ? `${CART_STORAGE_PREFIX}${user.email}`
@@ -128,20 +94,16 @@ export const CartProvider = ({ children }: CartProviderProps) => {
     0
   );
 
-  return (
-    <CartContext.Provider
-      value={{
-        cart,
-        addToCart,
-        removeFromCart,
-        incrementQuantity,
-        decrementQuantity,
-        clearCart,
-        totalItems,
-        totalPrice,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
-  );
+  const value: CartContextType = {
+    cart,
+    addToCart,
+    removeFromCart,
+    incrementQuantity,
+    decrementQuantity,
+    clearCart,
+    totalItems,
+    totalPrice,
+  };
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 };

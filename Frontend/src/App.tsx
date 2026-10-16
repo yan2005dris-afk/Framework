@@ -16,15 +16,27 @@ import Carrito from "./Components/Carrito/Carrito";
 import Checkout from "./Components/Carrito/Checkout";
 import Confirmacion from "./Components/Carrito/Confirmacion";
 import Login from "./Components/Auth/Login/Login";
-import { CartProvider } from "./Context/CartContext";
-import { AuthProvider, useAuth } from "./Context/AuthContext";
+import { CartProvider } from "./Context/CartProvider";
+import { AuthProvider } from "./Context/AuthProvider";
+import { useAuth } from "./Context/useAuth";
 
 /**
- * Guarda de ruta que requiere que el usuario esté autenticado.
+ * Spinner simple mientras AuthContext hidrata la sesion contra /api/me.
+ * Evita que un usuario con cookie valida quede parpadeando en /login.
+ */
+const HydrationSpinner = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-100">
+    <div className="text-slate-500 text-sm">Cargando sesion...</div>
+  </div>
+);
+
+/**
+ * Guarda de ruta que requiere que el usuario este autenticado.
  */
 const ProtectedRoute = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
+  if (loading) return <HydrationSpinner />;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
@@ -37,8 +49,9 @@ const ProtectedRoute = () => {
  * Redirige a los clientes hacia la vista de tienda.
  */
 const AdminRoute = () => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
 
+  if (loading) return <HydrationSpinner />;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
