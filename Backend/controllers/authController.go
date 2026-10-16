@@ -9,50 +9,58 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"multicatalogo-backend/auth"
+	"multicatalogo-backend/middleware"
 	"multicatalogo-backend/models"
 	"multicatalogo-backend/repository"
 )
 
-// AuthController maneja la autenticación de usuarios con JWT real (HS256) y verificación bcrypt.
+// CookieName es el nombre de la cookie httpOnly donde viaja el JWT.
+// Vivir en una constante evita typos entre emisor (Login) y verificador (middleware).
+const CookieName = "auth_token"
+
+// AuthController maneja la autenticación con JWT real (HS256) en cookie httpOnly.
 type AuthController struct {
 	dbRepo         repository.DatabaseRepository
 	jwtSecret      []byte
 	expiresSeconds int64
+	appEnv         string
 }
 
 // NewAuthController instancia un AuthController con dependencias inyectadas.
-// jwtSecret se usa para firmar los tokens (mínimo 32 bytes recomendado).
-// expiresSeconds define la vigencia del token (default 7200s = 2h si es <= 0).
-func NewAuthController(dbRepo repository.DatabaseRepository, jwtSecret string) *AuthController {
+// jwtSecret se usa para firmar los tokens (mínimo 32 bytes recomendado en producción).
+// appEnv controla el flag Secure de la cookie (en dev http://localhost requiere Secure=false).
+func NewAuthController(dbRepo repository.DatabaseRepository, jwtSecret string, appEnv string) *AuthController {
 	if len(jwtSecret) == 0 {
 		jwtSecret = "dev-insecure-secret-please-replace-in-production"
 	}
-	expires := int64(7200)
+	if appEnv == "" {
+		appEnv = "dev"
+	}
 	return &AuthController{
 		dbRepo:         dbRepo,
 		jwtSecret:      []byte(jwtSecret),
-		expiresSeconds: expires,
+		expiresSeconds: 7200,
+		appEnv:         appEnv,
 	}
 }
 
-// NewAuthControllerWithTTL instancia un AuthController con TTL de token explícito (segundos).
-func NewAuthControllerWithTTL(dbRepo repository.DatabaseRepository, jwtSecret string, expiresSeconds int64) *AuthController {
-	c := NewAuthController(dbRepo, jwtSecret)
+// NewAuthControllerWithTTL permite especificar el TTL del token (segundos).
+func NewAuthControllerWithTTL(dbRepo repository.DatabaseRepository, jwtSecret string, appEnv string, expiresSeconds int64) *AuthController {
+	c := NewAuthController(dbRepo, jwtSecret, appEnv)
 	if expiresSeconds > 0 {
 		c.expiresSeconds = expiresSeconds
 	}
 	return c
 }
 
-// Login autentica al usuario con bcrypt y devuelve un JWT firmado (HS256).
-//
-// Valida que el body sea {email, password} no vacíos, busca el usuario por
-// email, compara el password contra el hash bcrypt almacenado y firma un
-// token con los claims estándar {sub: usuarioID, email, rol, iat, exp}.
+// Login autentica al usuario con bcrypt, firma el JWT y lo entrega en una
+// cookie httpOnly `auth_token` (SameSite=Lax, Secure según APP_ENV). El body
+// JSON no incluye el token — eso reduce la superficie de robo por XSS al
+// evitar que el JS del frontend tenga acceso al valor.
 //
 // Respuestas:
 //   - 400 BadRequest: cuerpo inválido o email/password vacíos.
-//   - 401 Unauthorized: usuario no encontrado o password incorrecto.
+//   - 401 Unauthorized: usuario no encontrado o password incorrecta.
 func (ac *AuthController) Login(c *fiber.Ctx) error {
 	var req models.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -87,13 +95,14 @@ func (ac *AuthController) Login(c *fiber.Ctx) error {
 	}
 
 	now := time.Now()
+	expAt := now.Add(time.Duration(ac.expiresSeconds) * time.Second)
 	claims := auth.AuthClaims{
 		Email: user.Email,
 		Rol:   user.Rol,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   itoa(user.ID),
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(ac.expiresSeconds) * time.Second)),
+			ExpiresAt: jwt.NewNumericDate(expAt),
 		},
 	}
 
@@ -105,11 +114,61 @@ func (ac *AuthController) Login(c *fiber.Ctx) error {
 		})
 	}
 
+	// Cookie httpOnly: el JS del frontend NO puede leer este valor.
+	// SameSite=Lax permite que el browser la envíe en requests same-site (POST /api/checkout).
+	// Secure=true en cualquier entorno != dev (HTTPS obligatorio para cookie Secure).
+	c.Cookie(&fiber.Cookie{
+		Name:     CookieName,
+		Value:    signed,
+		HTTPOnly: true,
+		Secure:   ac.appEnv != "dev",
+		SameSite: "lax",
+		Path:     "/",
+		Expires:  expAt,
+	})
+
 	return c.JSON(fiber.Map{
-		"token":   signed,
 		"email":   user.Email,
 		"rol":     user.Rol,
 		"expires": ac.expiresSeconds,
+	})
+}
+
+// Logout limpia la cookie httpOnly. Endpoint público (no necesita RequireAuth):
+// si no hay cookie, simplemente termina; si la hay, la sobrescribe con MaxAge=-1
+// para que el browser la borre.
+func (ac *AuthController) Logout(c *fiber.Ctx) error {
+	c.Cookie(&fiber.Cookie{
+		Name:     CookieName,
+		Value:    "",
+		HTTPOnly: true,
+		Secure:   ac.appEnv != "dev",
+		SameSite: "lax",
+		Path:     "/",
+		MaxAge:   -1,
+	})
+	return c.JSON(fiber.Map{"status": "ok"})
+}
+
+// Me devuelve la identidad del usuario autenticado extrayéndola de c.Locals
+// (poblada por middleware.RequireAuth). Requiere estar protegido por el
+// middleware; si no se setearon locals, devuelve 401.
+//
+// Es el endpoint que el frontend usa al montar la app para hidratar la sesión
+// desde la cookie, sin depender de nada guardado en localStorage.
+func (ac *AuthController) Me(c *fiber.Ctx) error {
+	email, emailOk := c.Locals(middleware.LocalEmail).(string)
+	rol, _ := c.Locals(middleware.LocalRol).(string)
+	usuarioID, _ := c.Locals(middleware.LocalUsuarioID).(int)
+	if !emailOk || email == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "No autenticado",
+		})
+	}
+	return c.JSON(fiber.Map{
+		"id":    usuarioID,
+		"email": email,
+		"rol":   rol,
 	})
 }
 

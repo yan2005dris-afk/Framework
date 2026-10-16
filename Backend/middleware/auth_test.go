@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -179,3 +180,61 @@ func TestRequireAdmin_AdminPasa(t *testing.T) {
 		t.Fatalf("esperado 200, obtuvo %d - body=%s", resp.StatusCode, string(body))
 	}
 }
+
+// TestRequireAuth_DesdeCookie_Valida verifica que el middleware lee el JWT
+// desde la cookie httpOnly cuando no se envia header Authorization.
+// Esto es el camino normal del flujo SPA: el browser adjunta la cookie
+// automaticamente y el backend la acepta sin que el JS vea nunca el token.
+func TestRequireAuth_DesdeCookie_Valida(t *testing.T) {
+	stub := &stubDBRepo{knownEmail: "admin@upse.edu.ec", knownID: 7}
+	app, called := newAppProtected(stub)
+
+	tok := signToken(t, []byte("test-secret"), "admin@upse.edu.ec", "admin", time.Now().Add(1*time.Hour))
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	// Sólo cookie, sin header Authorization.
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: tok})
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test falló: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("esperado 200 desde cookie, obtuvo %d - body=%s", resp.StatusCode, string(body))
+	}
+	if *called != 1 {
+		t.Errorf("next() debió invocarse 1 vez, fue %d", *called)
+	}
+}
+
+// TestRequireAuth_HeaderGanaSobreCookie verifica que cuando hay ambos (header
+// y cookie), el header Authorization tiene precedencia. El backend prefiere el
+// header porque permite a clientes externos (curl, tests) usar Bearer explícito.
+func TestRequireAuth_HeaderGanaSobreCookie(t *testing.T) {
+	stub := &stubDBRepo{knownEmail: "admin@upse.edu.ec", knownID: 7}
+	app, _ := newAppProtected(stub)
+
+	// Header con un secret válido.
+	tokHeader := signToken(t, []byte("test-secret"), "admin@upse.edu.ec", "admin", time.Now().Add(1*time.Hour))
+	// Cookie con un secret distinto (debe ser ignorada por el middleware).
+	tokCookie := signToken(t, []byte("OTHER-SECRET"), "attacker@example.com", "admin", time.Now().Add(1*time.Hour))
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+tokHeader)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: tokCookie})
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("esperado 200, obtuvo %d - body=%s", resp.StatusCode, string(body))
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "admin@upse.edu.ec") {
+		t.Errorf("se esperaba email del token del header; body=%s", string(body))
+	}
+	if strings.Contains(string(body), "attacker@example.com") {
+		t.Errorf("el header no debió ser anulado por la cookie; body=%s", string(body))
+	}
+}
+
+
