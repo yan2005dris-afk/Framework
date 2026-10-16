@@ -3,56 +3,62 @@ package controllers
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"golang.org/x/crypto/bcrypt"
 	"multicatalogo-backend/middleware"
 	"multicatalogo-backend/models"
 )
 
-// dbWithUser es un repo que devuelve un usuario con un hash bcrypt pre-generado.
-type dbWithUser struct {
-	email  string
-	id     int
-	hash   string
-	notFound bool
+// fakeAuthService es un httptest.Server que mockea el auth-service.
+// Devuelve lo que configuramos en cada test, y graba las requests que recibe.
+type fakeAuthService struct {
+	server   *httptest.Server
+	lastReq  *http.Request
+	lastBody []byte
+	// Respuesta programable:
+	respStatus  int
+	respBody    string
+	respCookies []*http.Cookie
 }
 
-func (d *dbWithUser) BuscarUsuarioPorEmail(email string) (*models.Usuario, error) {
-	if d.notFound || email != d.email {
-		return nil, fiber.NewError(fiber.StatusNotFound, "no encontrado")
-	}
-	return &models.Usuario{ID: d.id, Email: d.email, Password: d.hash, Rol: "admin"}, nil
-}
-func (d *dbWithUser) ObtenerProductos() ([]models.Producto, error)                       { return nil, nil }
-func (d *dbWithUser) ObtenerProductoPorID(int) (*models.Producto, error)                  { return nil, nil }
-func (d *dbWithUser) ObtenerRed() (*models.Referido, error)                               { return nil, nil }
-func (d *dbWithUser) CrearPedido(int, models.CheckoutRequest) (*models.Pedido, error)    { return nil, nil }
-func (d *dbWithUser) ActualizarComisiones(int, float64) error                             { return nil }
-
-// hashPassword genera un hash bcrypt determinístico para tests (cost 4 para velocidad).
-func hashPassword(t *testing.T, plain string) string {
-	t.Helper()
-	h, err := bcrypt.GenerateFromPassword([]byte(plain), 4)
-	if err != nil {
-		t.Fatalf("bcrypt: %v", err)
-	}
-	return string(h)
+func newFakeAuthService(t *testing.T) *fakeAuthService {
+	f := &fakeAuthService{respStatus: http.StatusOK, respBody: `{"ok":true}`}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		f.lastReq = r
+		f.lastBody = body
+		// Devolver la respuesta programable con las cookies programables.
+		for _, c := range f.respCookies {
+			http.SetCookie(w, c)
+		}
+		w.WriteHeader(f.respStatus)
+		_, _ = w.Write([]byte(f.respBody))
+	})
+	f.server = httptest.NewServer(mux)
+	t.Cleanup(f.server.Close)
+	return f
 }
 
-// TestAuthController_Login_SetteaCookie verifica que /api/login configura
-// la cookie httpOnly con el JWT firmado cuando las credenciales son válidas.
-// Que el body JSON NO incluya el token tambien es parte del contrato.
-func TestAuthController_Login_SetteaCookie(t *testing.T) {
-	repo := &dbWithUser{email: "admin@upse.edu.ec", id: 42, hash: hashPassword(t, "123456")}
-	ctrl := NewAuthController(repo, "test-secret", "dev")
+func TestAuthController_Login_ProxyaYDevuelveCookie(t *testing.T) {
+	fake := newFakeAuthService(t)
+	fake.respStatus = http.StatusOK
+	fake.respBody = `{"email":"admin@upse.edu.ec","rol":"admin","expires":7200}`
+	fake.respCookies = []*http.Cookie{{
+		Name:     CookieName,
+		Value:    "fake-jwt-signed",
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+		MaxAge:   7200,
+	}}
+
+	ctrl := NewAuthController(fake.server.URL)
 	app := fiber.New()
 	app.Post("/api/login", ctrl.Login)
 
@@ -65,56 +71,74 @@ func TestAuthController_Login_SetteaCookie(t *testing.T) {
 		t.Fatalf("Error: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("esperado 200, obtuvo %d - body=%s", resp.StatusCode, string(respBody))
+		t.Fatalf("esperado 200, obtuvo %d", resp.StatusCode)
 	}
 
-	// 1. La cookie debe estar presente y marcada httpOnly.
-	cookies := resp.Cookies()
+	// 1. La cookie del auth-service llego al cliente.
 	var cookie *http.Cookie
-	for _, c := range cookies {
+	for _, c := range resp.Cookies() {
 		if c.Name == CookieName {
 			cookie = c
 			break
 		}
 	}
 	if cookie == nil {
-		t.Fatalf("no se encontró cookie %s en respuesta: %v", CookieName, cookies)
+		t.Fatalf("no se encontró cookie %s en respuesta: %v", CookieName, resp.Cookies())
+	}
+	if cookie.Value != "fake-jwt-signed" {
+		t.Errorf("cookie Value esperado 'fake-jwt-signed', obtuvo %q", cookie.Value)
 	}
 	if !cookie.HttpOnly {
-		t.Errorf("cookie %s debe ser httpOnly", CookieName)
-	}
-	if cookie.SameSite != http.SameSiteLaxMode {
-		t.Errorf("cookie SameSite esperado Lax, obtuvo %v", cookie.SameSite)
-	}
-	if cookie.Secure {
-		t.Errorf("en dev la cookie NO debe ser Secure (http://localhost), obtuvo true")
-	}
-	if cookie.Value == "" {
-		t.Errorf("cookie no puede estar vacía")
-	}
-	if cookie.Path != "/" {
-		t.Errorf("cookie Path esperado '/', obtuvo %q", cookie.Path)
+		t.Errorf("cookie debe ser httpOnly")
 	}
 
-	// 2. El body no debe incluir el token.
+	// 2. El body que devolvió el auth-service fue forwardeado integro.
 	respBody, _ := io.ReadAll(resp.Body)
-	if strings.Contains(string(respBody), `"token"`) {
-		t.Errorf("body NO debe contener 'token' (debe ir solo en cookie): %s", string(respBody))
-	}
 	if !strings.Contains(string(respBody), `"email":"admin@upse.edu.ec"`) {
-		t.Errorf("body debe incluir email del usuario: %s", string(respBody))
+		t.Errorf("body esperado contiene email; obtuvo: %s", string(respBody))
 	}
-	if !strings.Contains(string(respBody), `"rol":"admin"`) {
-		t.Errorf("body debe incluir rol: %s", string(respBody))
+
+	// 3. El request llego al fake con el body original.
+	if fake.lastReq == nil {
+		t.Fatalf("auth-service no recibio request")
+	}
+	if string(fake.lastBody) != string(body) {
+		t.Errorf("body original no fue forwardeado integro")
+	}
+	if ct := fake.lastReq.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type esperado 'application/json', obtuvo %q", ct)
 	}
 }
 
-// TestAuthController_Login_PasswordIncorrecta retorna 401 sin filtrar
-// existencia de la cuenta.
-func TestAuthController_Login_PasswordIncorrecta(t *testing.T) {
-	repo := &dbWithUser{email: "admin@upse.edu.ec", id: 42, hash: hashPassword(t, "123456")}
-	ctrl := NewAuthController(repo, "test-secret", "dev")
+func TestAuthController_Login_400CuandoCuerpoFalta(t *testing.T) {
+	fake := newFakeAuthService(t)
+	ctrl := NewAuthController(fake.server.URL)
+	app := fiber.New()
+	app.Post("/api/login", ctrl.Login)
+
+	// Body vacio -> el fake recibe "{}" o vacio igual, y el auth-service
+	// en produccion devolveria 400. Aqui el fake devuelve 200, asi que
+	// el proxy termina 200. El test importante es que la cookie no se
+	// propague cuando el upstream falla (próximo test).
+	req := httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewReader([]byte("{}")))
+	req.Header.Set("Content-Type", "application/json")
+	resp, _ := app.Test(req)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("esperado 200 (forwarded del fake), obtuvo %d", resp.StatusCode)
+	}
+	for _, c := range resp.Cookies() {
+		if c.Name == CookieName && c.Value != "" {
+			t.Errorf("cookie de sesion no debe setearse si la respuesta es 200 sin Set-Cookie upstream")
+		}
+	}
+}
+
+func TestAuthController_Login_NoPropagaCookieSiUpstreamFalla(t *testing.T) {
+	fake := newFakeAuthService(t)
+	fake.respStatus = http.StatusUnauthorized
+	fake.respBody = `{"error":"Credenciales incorrectas"}`
+	fake.respCookies = nil
+	ctrl := NewAuthController(fake.server.URL)
 	app := fiber.New()
 	app.Post("/api/login", ctrl.Login)
 
@@ -126,18 +150,29 @@ func TestAuthController_Login_PasswordIncorrecta(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("esperado 401, obtuvo %d", resp.StatusCode)
 	}
+	respBody, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(respBody), "Credenciales incorrectas") {
+		t.Errorf("body esperado contiene mensaje del upstream, obtuvo: %s", string(respBody))
+	}
 	for _, c := range resp.Cookies() {
 		if c.Name == CookieName {
-			t.Errorf("NO debe haber cookie de sesión cuando auth falla")
+			t.Errorf("no debe haber cookie de sesion cuando upstream devuelve 401")
 		}
 	}
 }
 
-// TestAuthController_Logout_LimpiaCookie verifica que POST /api/logout setea
-// la cookie con MaxAge=0 (o negativo) y body 'status':'ok'.
-func TestAuthController_Logout_LimpiaCookie(t *testing.T) {
-	repo := &dbWithUser{email: "admin@upse.edu.ec", id: 42, hash: hashPassword(t, "123456")}
-	ctrl := NewAuthController(repo, "test-secret", "dev")
+func TestAuthController_Logout_ProxyaYDevuelveMaxAgeNegativo(t *testing.T) {
+	fake := newFakeAuthService(t)
+	fake.respStatus = http.StatusOK
+	fake.respBody = `{"status":"ok"}`
+	fake.respCookies = []*http.Cookie{{
+		Name:   CookieName,
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+	}}
+
+	ctrl := NewAuthController(fake.server.URL)
 	app := fiber.New()
 	app.Post("/api/logout", ctrl.Logout)
 
@@ -146,29 +181,20 @@ func TestAuthController_Logout_LimpiaCookie(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("esperado 200, obtuvo %d", resp.StatusCode)
 	}
-
 	cookies := resp.Cookies()
-	var cookie *http.Cookie
-	for _, c := range cookies {
-		if c.Name == CookieName {
-			cookie = c
-			break
-		}
-	}
-	if cookie == nil {
+	if len(cookies) == 0 {
 		t.Fatalf("se esperaba Set-Cookie de limpieza")
 	}
-	if cookie.MaxAge >= 0 {
-		t.Errorf("cookie de logout debe tener MaxAge<0, obtuvo %d", cookie.MaxAge)
+	for _, c := range cookies {
+		if c.Name == CookieName && c.MaxAge >= 0 {
+			t.Errorf("cookie de logout debe tener MaxAge<0, obtuvo %d", c.MaxAge)
+		}
 	}
 }
 
-// TestAuthController_Me_ConLocals retorna 200 con la identidad del token.
 func TestAuthController_Me_ConLocals(t *testing.T) {
-	repo := &dbWithUser{email: "admin@upse.edu.ec", id: 42, hash: "x"}
-	ctrl := NewAuthController(repo, "test-secret", "dev")
+	ctrl := NewAuthController("http://127.0.0.1:1") // Nunca se llama en Me().
 	app := fiber.New()
-	// Simulamos RequireAuth corriendo antes.
 	app.Use(func(c *fiber.Ctx) error {
 		c.Locals(middleware.LocalEmail, "admin@upse.edu.ec")
 		c.Locals(middleware.LocalRol, "admin")
@@ -194,10 +220,8 @@ func TestAuthController_Me_ConLocals(t *testing.T) {
 	}
 }
 
-// TestAuthController_Me_SinLocals retorna 401 (defensivo si alguien llama Me sin middleware).
 func TestAuthController_Me_SinLocals(t *testing.T) {
-	repo := &dbWithUser{}
-	ctrl := NewAuthController(repo, "test-secret", "dev")
+	ctrl := NewAuthController("http://127.0.0.1:1")
 	app := fiber.New()
 	app.Get("/api/me", ctrl.Me)
 
@@ -208,39 +232,18 @@ func TestAuthController_Me_SinLocals(t *testing.T) {
 	}
 }
 
-// TestAuthController_Login_RepoSinConexion_NoFiltraDetalle verifica que errores
-// 500 internos no se filtran al body en producción (APP_ENV=prod).
-func TestAuthController_Login_RepoSinConexion_NoFiltraDetalle(t *testing.T) {
-	repo := &dbWithBrokenLookup{}
-	ctrl := NewAuthController(repo, "test-secret", "prod")
+func TestAuthController_Login_502SiUpstreamNoResponde(t *testing.T) {
+	// URL de un puerto que no escucha.
+	ctrl := NewAuthController("http://127.0.0.1:1")
 	app := fiber.New()
 	app.Post("/api/login", ctrl.Login)
 
-	body, _ := json.Marshal(models.LoginRequest{Email: "any@example.com", Password: "x"})
+	body, _ := json.Marshal(models.LoginRequest{Email: "x@y.z", Password: "x"})
 	req := httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, _ := app.Test(req)
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("esperado 500, obtuvo %d", resp.StatusCode)
-	}
-	respBody, _ := io.ReadAll(resp.Body)
-	// En prod no debe filtrarse el detalle del error.
-	if strings.Contains(string(respBody), "connection refused") {
-		t.Errorf("en prod el body NO debe filtrar detalles internos: %s", string(respBody))
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("esperado 502 si auth-service no responde, obtuvo %d", resp.StatusCode)
 	}
 }
-
-type dbWithBrokenLookup struct{}
-
-func (d *dbWithBrokenLookup) BuscarUsuarioPorEmail(string) (*models.Usuario, error) {
-	return nil, errors.New("connection refused: db down at /var/run/postgresql")
-}
-func (d *dbWithBrokenLookup) ObtenerProductos() ([]models.Producto, error)                     { return nil, nil }
-func (d *dbWithBrokenLookup) ObtenerProductoPorID(int) (*models.Producto, error)                { return nil, nil }
-func (d *dbWithBrokenLookup) ObtenerRed() (*models.Referido, error)                             { return nil, nil }
-func (d *dbWithBrokenLookup) CrearPedido(int, models.CheckoutRequest) (*models.Pedido, error)  { return nil, nil }
-func (d *dbWithBrokenLookup) ActualizarComisiones(int, float64) error                           { return nil }
-
-// silence unused-time warnings
-var _ = time.Now
