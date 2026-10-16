@@ -19,6 +19,8 @@ var (
 	ErrNotFound = errors.New("registro no encontrado")
 	// ErrNoDBConnection indica que el pool de conexiones no está inicializado.
 	ErrNoDBConnection = errors.New("conexión a base de datos no disponible")
+	// ErrCantidadInvalida indica que un item del checkout tiene cantidad <= 0 o faltante.
+	ErrCantidadInvalida = errors.New("cantidad debe ser mayor que cero")
 )
 
 // PostgresRepository implementa DatabaseRepository usando un pool de conexiones pgxpool.
@@ -42,8 +44,9 @@ func (r *PostgresRepository) getPool() (*pgxpool.Pool, error) {
 	return nil, ErrNoDBConnection
 }
 
-// BuscarUsuarioPorCredenciales consulta la tabla usuarios validando email y contraseña.
-func (r *PostgresRepository) BuscarUsuarioPorCredenciales(email, password string) (*models.Usuario, error) {
+// BuscarUsuarioPorEmail trae al usuario (incluido el hash bcrypt del password) por email.
+// La verificación del password se hace en el controller con bcrypt.CompareHashAndPassword.
+func (r *PostgresRepository) BuscarUsuarioPorEmail(email string) (*models.Usuario, error) {
 	pool, err := r.getPool()
 	if err != nil {
 		return nil, err
@@ -52,9 +55,9 @@ func (r *PostgresRepository) BuscarUsuarioPorCredenciales(email, password string
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `SELECT id, email, password, rol FROM usuarios WHERE email = $1 AND password = $2`
+	query := `SELECT id, email, password, rol FROM usuarios WHERE email = $1`
 	var user models.Usuario
-	err = pool.QueryRow(ctx, query, email, password).Scan(&user.ID, &user.Email, &user.Password, &user.Rol)
+	err = pool.QueryRow(ctx, query, email).Scan(&user.ID, &user.Email, &user.Password, &user.Rol)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -348,8 +351,9 @@ func (c *RedisCacheRepository) Del(key string) error {
 
 var defaultRepo = &PostgresRepository{}
 
-func BuscarUsuarioPorCredenciales(email, password string) (*models.Usuario, error) {
-	return defaultRepo.BuscarUsuarioPorCredenciales(email, password)
+// BuscarUsuarioPorEmail (wrapper de compatibilidad) delega en la implementación por defecto.
+func BuscarUsuarioPorEmail(email string) (*models.Usuario, error) {
+	return defaultRepo.BuscarUsuarioPorEmail(email)
 }
 
 func ObtenerProductos() ([]models.Producto, error) {

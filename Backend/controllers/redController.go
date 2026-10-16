@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v2"
+	"multicatalogo-backend/controllers/helpers"
 	"multicatalogo-backend/models"
 	"multicatalogo-backend/repository"
 )
@@ -14,13 +15,19 @@ import (
 type RedController struct {
 	dbRepo    repository.DatabaseRepository
 	cacheRepo repository.CacheRepository
+	appEnv    string
 }
 
 // NewRedController crea una instancia de RedController.
-func NewRedController(dbRepo repository.DatabaseRepository, cacheRepo repository.CacheRepository) *RedController {
+// appEnv controla la sanitización de errors: "dev" los expone, otro valor los oculta.
+func NewRedController(dbRepo repository.DatabaseRepository, cacheRepo repository.CacheRepository, appEnv string) *RedController {
+	if appEnv == "" {
+		appEnv = "dev"
+	}
 	return &RedController{
 		dbRepo:    dbRepo,
 		cacheRepo: cacheRepo,
+		appEnv:    appEnv,
 	}
 }
 
@@ -47,9 +54,12 @@ func (rc *RedController) GetRed(c *fiber.Ctx) error {
 				"error": "Estructura de red no encontrada",
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Error al obtener la red de referidos",
-		})
+		public, detail := helpers.SanitizeErrorDetails(rc.appEnv, err)
+		resp := fiber.Map{"error": public}
+		if detail != "" {
+			resp["detalle"] = detail
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(resp)
 	}
 
 	// 3. Guardar en Redis con TTL de 10 minutos (600 segundos)
@@ -65,6 +75,6 @@ func (rc *RedController) GetRed(c *fiber.Ctx) error {
 
 // Compatibilidad hacia atrás
 func GetRed(c *fiber.Ctx) error {
-	ctrl := NewRedController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{})
+	ctrl := NewRedController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{}, "dev")
 	return ctrl.GetRed(c)
 }

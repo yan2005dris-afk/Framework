@@ -51,9 +51,11 @@ CREATE TABLE IF NOT EXISTS pedido_items (
 );
 
 -- Datos semilla: usuarios
+-- Las passwords '123456' están hasheadas con bcrypt (cost 10).
+-- Generadas con: bcrypt.GenerateFromPassword([]byte("123456"), 10).
 INSERT INTO usuarios (id, email, password, rol) VALUES
-(1, 'admin@upse.edu.ec', '123456', 'admin'),
-(2, 'cliente@upse.edu.ec', '123456', 'cliente')
+(1, 'admin@upse.edu.ec', '$2a$10$wYdwoYJp2ubHFZYw73enietm48txFvoAjiHZHgBsZaKvT2vpf3Mji', 'admin'),
+(2, 'cliente@upse.edu.ec', '$2a$10$7J26b3yIZQ5XC.aiRhqHsOyibUpKimgaC3mKqgrrZQbqqrnbFD2Ua', 'cliente')
 ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     password = EXCLUDED.password,
