@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     api_title: str = "MultiCatalogo SaaS API"
     cors_origins: str = "http://localhost:5173"
 
+    # U3-T2 GA6: URL del auth-service al que el SaaS proxy-eea los
+    # endpoints de auth. En docker-compose es http://auth-service:3001
+    # (resoluble via DNS Docker). En dev nativo, http://localhost:3001.
+    auth_service_url: str = "http://auth-service:3001"
+
     # DB (asyncpg). Usa puerto 5435 para no chocar con la BD del nucleo Go/Fiber (5434).
     saas_db_host: str = "localhost"
     saas_db_port: int = 5435

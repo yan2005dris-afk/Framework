@@ -4,7 +4,7 @@ Bootstrap de la aplicacion:
 - Crea la instancia `app`.
 - Configura CORS con `AllowCredentials=True` y origenes por env
   (mismo patron que `Backend/main.go`).
-- Monta los routers (`app/api/health.py` por ahora).
+- Monta routers: `app/api/health.py` (T1) y `app/api/auth.py` (T2/GA6).
 - `lifespan` queda como hook para DB engine startup/shutdown (T1.2).
 
 Para correr en dev:
@@ -18,14 +18,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth import _close_client, router as auth_router
 from app.api.health import router as health_router
 from app.core.config import settings
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Hook de startup/shutdown. El engine async se instancia lazy en T1.2."""
+    """Hook de startup/shutdown. Cierra el cliente httpx singleton del proxy."""
     yield
+    await _close_client()
 
 
 app = FastAPI(
@@ -48,6 +50,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(health_router)
+app.include_router(auth_router)
 
 
 @app.get("/")
