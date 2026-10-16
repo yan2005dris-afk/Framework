@@ -1,1 +1,16 @@
-@import "tailwindcss"
+@import "tailwindcss";
+
+/* Auditoria mobile-first 2026-03:
+   - touch targets >= 44px en botones de accion (Cerrar Sesion, steppers carrito,
+     lightbox, Login).
+   - red de seguridad global: evitar overflow horizontal no deseado a 375px
+     cuando un componente se olvida del contenedor.
+   - tap-highlight-color: transparente para que el flash azul no rompa el diseno. */
+
+html, body {
+  overflow-x: hidden;
+}
+
+button, a, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
