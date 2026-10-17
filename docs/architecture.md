@@ -1,0 +1,165 @@
+# Arquitectura del stack MultiCatálogo
+
+> Living doc de cómo están armadas las piezas y cómo se habla el stack.
+> Última revisión: post-U3-T2 (octubre 2026), tras merger de GA1-GA8.
+
+## Visión de una sola imagen
+
+```
+                         ┌──────────────────────────────────────────────────────────┐
+                         │  Browser (futuro: React SPA)                              │
+                         │  cookies: auth_token (B2C) + saas_token (SaaS)          │
+                         └───────────────────────┬──────────────────────────────────┘
+                                                 │ HTTP
+                                                 ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│  gateway (Caddy 2) — :8080                                                        │
+│                                                                                    │
+│  /api/tx/*     ───► backend:3000                                                   │
+│  /api/saas/*   ───► saas-api:8000                                                  │
+│  /api/auth/*   ───► auth-service:3001   (recomendado agregar retro; hoy proxied     │
+│                                       indirectamente por Backend/SaaS vía GA5/GA6)  │
+│                                                                                    │
+│  forward_auth auth-service:3001 { uri /auth/validate, copy_headers X-User-* }       │
+│  reverse_proxy X-User-* upstream (viaje transparente al backend/SaaS)               │
+└──────────────┬──────────────────┬──────────────────────┬─────────────────────────────┘
+               │                  │                      │
+   ┌───────────▼────────┐ ┌────────▼────────────┐ ┌───────▼──────────────────┐
+   │  backend          │ │  saas-api           │ │  auth-service             │
+   │  Go/Fiber :3000   │ │  FastAPI :8000      │ │  Go/Fiber :3001           │
+   │  Login B2C        │ │  Multi-tenant       │ │  Emite/valida JWTs        │
+   │  Catalogo publico │ │  Tenants, billing   │ │  schema 'auth'           │
+   │  Checkout ACID    │ │                     │ │                           │
+   │  Red MLM          │ │                     │ │                           │
+   │  Http-proxy       │ │  Http-proxy         │ │  NO firma JWT para SaaS   │
+   │  ─► auth-service  │ │  ─► auth-service    │ │  directo (futuro); hoy:    │
+   └────────┬──────────┘ └─────────┬────────────┘ │  Frontend habla al         │
+            │                     │              │  gateway que valida.       │
+            └──────────┬──────────┘              └─────────────┬───────────────┘
+                       │                                       │
+                       └─────────┬──────────────────────┬──────┘
+                                 │                      │
+                  ┌──────────────▼──────────┐  ┌──────────▼──────────┐
+                  │  Postgres 16            │  │  Redis 7            │
+                  │  :5432 (interno)         │  │  :6379               │
+                  │                          │  │  Cache-Aside B2C     │
+                  │  Schemas:                │  │                     │
+                  │   - auth (auth-service)  │  └─────────────────────┘
+                  │   - backend (backend)    │
+                  │   - saas (saas-api)      │
+                  │                          │
+                  │  Multitenant con         │
+                  │  tenant_id (a partir     │
+                  │  de U3-T3, schema saas)  │
+                  └──────────────────────────┘
+```
+
+## Reglas clave
+
+### 1. Auth centralizada vive en el gateway (no en cada servicio)
+
+Caddy hace `forward_auth auth-service:3001` con `uri /auth/validate`. Para cada request a `/api/tx/*` o `/api/saas/*`:
+
+1. Caddy extrae token (cookie `auth_token` o header `Authorization: Bearer`).
+2. Hace sub-request POST a `auth-service:3001/auth/validate`.
+3. Si 200, copia headers `X-User-Id`, `X-User-Email`, `X-User-Rol`, `X-Tenant-Id`, `X-Rol-Saas` al upstream.
+4. Si 401, rechaza directo al cliente.
+
+Defense in depth: cada servicio backend (Backend, SaaS) tiene su propio `RequireAuth` que **re-verifica el token localmente** si llega a sus endpoints. Útil si el gateway cae o si un request bypasea.
+
+### 2. BD única con schemas separados
+
+Una sola instancia Postgres. Cada servicio **posee** un schema y escribe solo ahí:
+
+| Schema | Owner | Tablas hoy |
+|---|---|---|
+| `auth` | auth-service | `users` (con seed bcrypt) |
+| `backend` | Backend Go/Fiber | `usuarios`, `productos`, `referidos`, `pedidos`, `pedido_items` |
+| `saas` | SaaS | (futuras: `tenants`, `users_saas`, `plans`, `subscriptions`) |
+
+Los seeds actuales viven en `auth.users` (auth-service) y `public.*` (Backend init.sql). Las tablas `pedidos`/`pedido_items` quedan en `public` históricamente.
+
+Las FK cross-schema funcionan (Postgres las soporta dentro de la misma BD). Las vistas son la manera limpia de exponer un schema a otro cuando hace falta lectura cruzada.
+
+### 3. JWT firma/verifica vive solo en auth-service
+
+- Backend emite HTTP a `auth-service:3001/auth/login` (proxy en GA5) — ya no firma JWTs localmente.
+- SaaS hace lo mismo (proxy en GA6).
+- Middleware `RequireAuth` del backend y del SaaS siguen corriendo pero **solo validan** JWTs (no emiten). Comparten el mismo `JWT_SECRET` env (o `AUTH_JWT_SECRET` + fallback).
+
+### 4. Componentes por servicio
+
+#### `gateway/` (Caddy 2)
+
+- Caddyfile único.
+- Dockerfile multi-stage `caddy:2`.
+- 4 Servicios Docker en su `docker-compose.yml` adyacente (no confundir con el raíz): `gateway`, `auth-service`, `backend`, `saas-api`, `redis`, `db`.
+
+#### `auth-service/` (Go/Fiber)
+
+- Go 1.26, Fiber 2.x, golang-jwt/v5, bcrypt, pgx.
+- `migrations/0001_init.sql` crea schema `auth` + tabla `users` con seed bcrypt.
+- `scripts/entrypoint.sh` aplica migraciones antes del binario (espera activa a la BD).
+- Endpoints: `/auth/login`, `/auth/logout`, `/auth/refresh`, `/auth/validate`, `/auth/me`, `/auth/health`.
+- Cookies: `auth_token` (B2C) y `saas_token` (SaaS). Ambas httpOnly + SameSite=Lax + Secure=(env!=dev).
+
+#### `Backend/` (Go/Fiber B2C)
+
+- Go 1.26, Fiber 2.x, pgx, golang-jwt/v5.
+- Endpoints: `/api/{login,logout,me,productos,productos/:id,red,checkout,health}`.
+- Login/Logout/Me son **proxies HTTP** al auth-service (GA5).
+- El resto sigue usando `database_repository` con SQL real y `redis_cache` para Cache-Aside.
+
+#### `Unidad3_SaaS/` (FastAPI SaaS)
+
+- Python 3.11, FastAPI 0.115+, uvicorn, SQLAlchemy 2.x async, Alembic, httpx, pydantic v2.
+- Endpoints: `/health`, `/api/saas/health`, `/api/saas/auth/{login,logout,refresh,me}` (proxies HTTP al auth-service).
+- Modelos en `app/models/`: `tenant.py`, `user.py`, `base.py` con `TimestampMixin`.
+- Alembic con `migrations/0001_initial.py` que crea `tenants` + `users_saas`.
+
+### 5. Flujo de un request típico
+
+Ejemplo: `GET /api/tx/red` con cookie `auth_token` válida:
+
+1. SPA hace `fetch('http://localhost:8080/api/tx/red', { credentials: 'include' })`. Cookie adjunta por el browser.
+2. Caddy recibe en `:8080`. Como el path matchea `/api/tx/*`, sabe que va al backend.
+3. Caddy extrae la cookie, hace sub-request POST a `auth-service:3001/auth/validate` con la cookie.
+4. auth-service verifica JWT (HS256 con `AUTH_JWT_SECRET`), responde 200 y setea headers `X-User-Id:1`, `X-User-Email:admin@...`, `X-User-Rol:admin`.
+5. Caddy copia esos headers y hace `reverse_proxy /api/tx/red http://backend:3000`.
+6. Backend recibe el request con los headers `X-User-*`. El middleware `RequireAuth` **defensa en profundidad** también verifica (lee el token de la cookie, lo verifica con el mismo secret, y poblaría `c.Locals`).
+7. Backend responde con el árbol MLM.
+8. Caddy devuelve la respuesta al cliente.
+
+Si la cookie es inválida o ausente: el sub-request a `/auth/validate` da 401, Caddy responde 401 directo, el request nunca llega al backend.
+
+### 6. Variables de entorno por servicio
+
+| Servicio | Vars clave |
+|---|---|
+| gateway | (sin vars, lee config desde compose) |
+| auth-service | `APP_ENV`, `AUTH_JWT_SECRET`, `AUTH_DB_*`, `CORS_ORIGINS` |
+| backend | `APP_ENV`, `JWT_SECRET`/`AUTH_JWT_SECRET`, `BACKEND_DB_*`, `REDIS_*`, `AUTH_SERVICE_URL`, `CORS_ORIGINS` |
+| saas-api | `APP_ENV`, `AUTH_SERVICE_URL`, `SAAS_DB_*`, `CORS_ORIGINS` |
+| db | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
+
+`AUTH_JWT_SECRET` debe ser **el mismo valor** en auth-service y en backend/saas para que sus JWTs sean compatibles. Si Backend usa `AUTH_JWT_SECRET=foo` y auth-service usa `AUTH_JWT_SECRET=foo`, todo funciona; si difieren, cada servicio valida solo los suyos.
+
+### 7. ¿Cómo se levanta todo?
+
+```bash
+cp .env.example .env                  # AJUSTAR AUTH_JWT_SECRET a algo fuerte en prod
+docker compose up -d --build
+# Esperar ~30s para healthchecks
+bash tests/e2e/gateway_e2e.sh
+```
+
+Para dev nativo (sin Docker): arrancar cada servicio individualmente con su `main.go` / `uvicorn`, ajustar `AUTH_SERVICE_URL` a `http://localhost:3001`.
+
+### 8. Decisiones arquitectónicas clave (L4-L7)
+
+- **L4** (operador): descartar full microservicios por superficie excesiva; extraer solo `auth-service`.
+- **L5** (operador): stack Go/Fiber para el auth-service (consistente con Backend).
+- **L6** (operador): BD única compartida con schemas separados — pragmatic, terminable en semestre.
+- **L7** (operador): el mismo JWT_SECRET se usa para los dos tipos de tokens.
+
+Issues abiertas para trabajo futuro en `docs/REQUIREMENTS_CHECKLIST.md` y los issues #15-#21.
