@@ -1,14 +1,17 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation } from "@tanstack/react-router";
 import { useAuth } from "../../Context/useAuth";
 import { Icon } from "../Share/Icon";
 import type { IconName } from "lucide-react/dynamic";
 
 interface NavItem {
   name: string;
-  path: string;
+  path: NavPath;
   icon: IconName;
   soloAdmin?: boolean;
 }
+
+/** Rutas del layout protegido. El union mantiene `to={item.path}` tipado por TanStack Router. */
+type NavPath = "/" | "/tienda" | "/catalogo" | "/mi-red" | "/carrito";
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -33,7 +36,7 @@ const Sidebar = ({
   onCloseMobile,
 }: SidebarProps) => {
   const { user } = useAuth();
-  const location = useLocation();
+  const { pathname } = useLocation();
 
   const itemsPermitidos = navItems.filter(
     (item) => !item.soloAdmin || user?.rol === "admin"
@@ -92,8 +95,8 @@ const Sidebar = ({
           {itemsPermitidos.map((item) => {
             const isActive =
               item.path === "/"
-                ? location.pathname === "/"
-                : location.pathname.startsWith(item.path);
+                ? pathname === "/"
+                : pathname.startsWith(item.path);
 
             return (
               <Link

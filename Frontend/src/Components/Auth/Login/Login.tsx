@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "../../../Context/useAuth";
 import type { Rol } from "../../../Context/auth-types";
 import { api } from "../../../services/api";
@@ -28,7 +28,7 @@ const Login = () => {
       login({ email: data.email, rol });
 
       // Redirigir según el rol del usuario
-      navigate(rol === "admin" ? "/" : "/tienda");
+      navigate({ to: rol === "admin" ? "/" : "/tienda" });
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);

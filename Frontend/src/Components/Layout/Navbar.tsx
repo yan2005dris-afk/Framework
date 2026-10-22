@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useCart } from "../../Context/useCart";
 import { useAuth } from "../../Context/useAuth";
 import { Icon } from "../Share/Icon";
@@ -18,7 +18,7 @@ const Navbar = ({ onToggleSidebar }: NavbarProps) => {
 
   const handleLogout = () => {
     logout();
-    navigate("/login");
+    navigate({ to: "/login" });
   };
 
   return (

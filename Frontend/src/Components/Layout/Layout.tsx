@@ -1,9 +1,15 @@
-import { Outlet } from "react-router-dom";
+import { type ReactNode, useState } from "react";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
-import { useState } from "react";
 
-const Layout = () => {
+/**
+ * Shell de la aplicacion: sidebar + navbar + area de contenido.
+ *
+ * Recibe el contenido como `children` (no usa `Outlet`) porque el router de
+ * TanStack monta el layout desde `_auth.tsx`, que ya renderiza el `<Outlet />`
+ * de la ruta hija.
+ */
+const Layout = ({ children }: { children: ReactNode }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -32,7 +38,7 @@ const Layout = () => {
           isCollapsed={isCollapsed}
         />
         <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-8">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>

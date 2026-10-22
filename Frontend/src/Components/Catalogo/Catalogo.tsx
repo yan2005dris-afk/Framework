@@ -1,23 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, getRouteApi } from "@tanstack/react-router";
 import { useCart } from "../../Context/useCart";
 import { getProductos } from "../../services/productosService";
 import { categorias, type Producto } from "../../data/productos";
 
 /**
  * Vista de catálogo interactivo con búsqueda en tiempo real, filtrado por categorías y useMemo.
+ *
+ * La categoría vive en la URL (`/catalogo?categoria=X`) y se deriva de la ruta, igual
+ * que antes con `useSearchParams` de react-router: el filtro es enlazable y sobrevive
+ * a un refresh. `getRouteApi` evita importar el archivo de ruta (que a su vez importa
+ * este componente).
  */
+const catalogoRoute = getRouteApi("/_auth/catalogo");
+
 const Catalogo = () => {
   const { addToCart } = useCart();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { categoria: categoriaUrl } = catalogoRoute.useSearch();
+  const navigate = catalogoRoute.useNavigate();
   const [busqueda, setBusqueda] = useState<string>("");
-  const [categoria, setCategoria] = useState<string>(
-    searchParams.get("categoria") ?? "Todas"
-  );
+  const categoria = categoriaUrl ?? "Todas";
 
   const cargarProductos = () => {
     setLoading(true);
@@ -72,12 +78,7 @@ const Catalogo = () => {
   }, [productos, busqueda, categoria]);
 
   const handleCategoriaChange = (value: string) => {
-    setCategoria(value);
-    if (value === "Todas") {
-      setSearchParams({});
-    } else {
-      setSearchParams({ categoria: value });
-    }
+    navigate({ search: value === "Todas" ? {} : { categoria: value } });
   };
 
   if (loading) {
@@ -139,8 +140,7 @@ const Catalogo = () => {
           <button
             onClick={() => {
               setBusqueda("");
-              setCategoria("Todas");
-              setSearchParams({});
+              navigate({ search: {} });
             }}
             className="mt-4 text-indigo-600 font-semibold hover:underline"
           >
@@ -154,7 +154,7 @@ const Catalogo = () => {
               key={prod.id}
               className="bg-white rounded-lg overflow-hidden border border-slate-200 shadow-sm flex flex-col hover:shadow-md transition"
             >
-              <Link to={`/producto/${prod.id}`}>
+              <Link to="/producto/$id" params={{ id: String(prod.id) }}>
                 <img
                   src={prod.img}
                   alt={prod.nombre}
@@ -165,7 +165,7 @@ const Catalogo = () => {
                 <p className="text-xs uppercase tracking-wide text-indigo-500 font-semibold">
                   {prod.categoria}
                 </p>
-                <Link to={`/producto/${prod.id}`}>
+                <Link to="/producto/$id" params={{ id: String(prod.id) }}>
                   <h3 className="font-semibold text-slate-700 hover:text-indigo-600 transition mt-1">
                     {prod.nombre}
                   </h3>
