@@ -68,7 +68,10 @@ class UserSaaSCRUD:
             rol=rol,
         )
         db.add(user)
-        await db.commit()
+        # flush(), no commit(): la transaccion la cierra `get_tenant_db` al
+        # final del request, para que el GUC de RLS siga activo durante toda
+        # la operacion (un commit intermedio borraria el SET LOCAL).
+        await db.flush()
         await db.refresh(user)
         return user
 
@@ -133,7 +136,7 @@ class UserSaaSCRUD:
         if password is not None:
             user.hashed_password = self.hash_password(password)
 
-        await db.commit()
+        await db.flush()
         await db.refresh(user)
         return user
 
@@ -144,7 +147,7 @@ class UserSaaSCRUD:
             return False
 
         await db.delete(user)
-        await db.commit()
+        await db.flush()
         return True
 
 

@@ -18,15 +18,18 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import get_db
-from app.deps.principal import PrincipalDep, require_tenant_scope
+from app.core.db import get_db, get_tenant_db
+from app.deps.principal import PrincipalDep
 from app.models.plan import Plan
 from app.models.subscription import Subscription
 from app.schemas.plan import PlanResponse, SubscriptionCreate, SubscriptionResponse
 
 router = APIRouter(prefix="/api/saas", tags=["billing"])
 
+# Lectura de planes: sesion simple (el catalogo no es tenant-scoped).
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+# Suscripciones: sesion tenant-scoped (GUC + transaccion del request).
+TenantDbSession = Annotated[AsyncSession, Depends(get_tenant_db)]
 
 
 async def _get_subscription_or_404(db: AsyncSession, tenant_id: int) -> Subscription:
@@ -51,11 +54,10 @@ async def list_plans(db: DbSession, principal: PrincipalDep) -> list[Plan]:
 @router.get("/tenants/{tenant_id}/subscription", response_model=SubscriptionResponse)
 async def get_subscription(
     tenant_id: int,
-    db: DbSession,
+    db: TenantDbSession,
     principal: PrincipalDep,
 ) -> Subscription:
     """Devuelve la suscripcion vigente del tenant."""
-    require_tenant_scope(principal, tenant_id)
     return await _get_subscription_or_404(db, tenant_id)
 
 
@@ -63,15 +65,13 @@ async def get_subscription(
 async def create_subscription(
     tenant_id: int,
     sub_data: SubscriptionCreate,
-    db: DbSession,
+    db: TenantDbSession,
     principal: PrincipalDep,
 ) -> Subscription:
     """Crea la suscripcion del tenant a un plan.
 
     Un tenant tiene como maximo una suscripcion (columna con UNIQUE).
     """
-    require_tenant_scope(principal, tenant_id)
-
     plan = (
         await db.execute(select(Plan).where(Plan.id == sub_data.plan_id))
     ).scalar_one_or_none()
@@ -99,7 +99,8 @@ async def create_subscription(
         cancel_at_period_end=sub_data.cancel_at_period_end,
     )
     db.add(subscription)
-    await db.commit()
+    # flush(), no commit(): la transaccion la cierra `get_tenant_db`.
+    await db.flush()
     await db.refresh(subscription)
     return subscription
 
@@ -107,16 +108,14 @@ async def create_subscription(
 @router.delete("/tenants/{tenant_id}/subscription", status_code=status.HTTP_204_NO_CONTENT)
 async def cancel_subscription(
     tenant_id: int,
-    db: DbSession,
+    db: TenantDbSession,
     principal: PrincipalDep,
 ) -> Response:
     """Cancela la suscripcion al final del periodo vigente (no la borra)."""
-    require_tenant_scope(principal, tenant_id)
-
     subscription = await _get_subscription_or_404(db, tenant_id)
     subscription.cancel_at_period_end = True
     subscription.status = "cancelled"
-    await db.commit()
+    await db.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -16,13 +16,9 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import get_db
+from app.core.db import get_tenant_db
 from app.crud.user import user_crud
-from app.deps.principal import (
-    PrincipalDep,
-    require_tenant_admin,
-    require_tenant_scope,
-)
+from app.deps.principal import PrincipalDep, require_tenant_admin
 from app.models.tenant import Tenant
 from app.schemas.user import (
     UserSaaSCreate,
@@ -33,7 +29,9 @@ from app.schemas.user import (
 
 router = APIRouter(prefix="/api/saas/tenants/{tenant_id}/users", tags=["users-saas"])
 
-DbSession = Annotated[AsyncSession, Depends(get_db)]
+# Sesion tenant-scoped: valida el scope, setea el GUC de RLS y
+# cierra la transaccion del request (ver app/core/db.py).
+DbSession = Annotated[AsyncSession, Depends(get_tenant_db)]
 
 
 async def _tenant_or_404(db: AsyncSession, tenant_id: int) -> None:
@@ -54,7 +52,6 @@ async def create_user(
     principal: PrincipalDep,
 ) -> object:
     """Invita un usuario nuevo al tenant (admin/superadmin del tenant)."""
-    require_tenant_scope(principal, tenant_id)
     require_tenant_admin(principal)
     await _tenant_or_404(db, tenant_id)
 
@@ -83,8 +80,6 @@ async def list_users(
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> object:
     """Lista los usuarios del tenant (paginado)."""
-    require_tenant_scope(principal, tenant_id)
-
     users, total = await user_crud.list_by_tenant(db, tenant_id, skip, limit)
     return UserSaaSListResponse(users=users, total=total)
 
@@ -97,8 +92,6 @@ async def get_user(
     principal: PrincipalDep,
 ) -> object:
     """Devuelve un usuario del tenant."""
-    require_tenant_scope(principal, tenant_id)
-
     user = await user_crud.get_by_id(db, user_id, tenant_id)
     if not user:
         raise HTTPException(
@@ -120,7 +113,6 @@ async def update_user(
 
     Cambiar el rol o el password exige admin/superadmin del tenant.
     """
-    require_tenant_scope(principal, tenant_id)
     if user_data.rol is not None or user_data.password is not None:
         require_tenant_admin(principal)
 
@@ -156,7 +148,6 @@ async def delete_user(
     principal: PrincipalDep,
 ) -> Response:
     """Elimina un usuario del tenant (admin/superadmin del tenant)."""
-    require_tenant_scope(principal, tenant_id)
     require_tenant_admin(principal)
 
     deleted = await user_crud.delete(db, user_id, tenant_id)

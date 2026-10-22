@@ -157,6 +157,9 @@ async def test_email_unique_per_tenant(db: AsyncSession):
         email="test@example.com",
         password="pass",
     )
+    # El CRUD hace flush(), no commit(): el commit lo cierra la dependencia
+    # de sesion del request. En un test hay que hacerlo explicito.
+    await db.commit()
 
     # Mismo email en el mismo tenant viola uq_users_saas_tenant_email.
     with pytest.raises(IntegrityError):
