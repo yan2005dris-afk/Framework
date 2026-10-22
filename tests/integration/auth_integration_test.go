@@ -24,13 +24,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -46,6 +45,14 @@ func TestJWTSecretConsistency(t *testing.T) {
 	// Este test verifica que las variables de entorno estén configuradas
 	// correctamente para que los tokens sean compatibles
 
+	// El secreto vive en el .env del proyecto, no en el entorno del shell que
+	// corre `go test`. Sin leerlo de ahi, este test se saltaba siempre y el de
+	// abajo firmaba la verificacion con la clave vacia.
+	if os.Getenv("AUTH_JWT_SECRET") == "" {
+		if v := readEnvFile("AUTH_JWT_SECRET"); v != "" {
+			os.Setenv("AUTH_JWT_SECRET", v)
+		}
+	}
 	authSecret := os.Getenv("AUTH_JWT_SECRET")
 	if authSecret == "" {
 		t.Skip("AUTH_JWT_SECRET no está configurado - saltando test de consistencia")
@@ -109,10 +116,15 @@ func TestAuthServiceLoginDirect(t *testing.T) {
 	// Verificar que el token sea un JWT válido
 	token := authCookie.Value
 	claims := &jwt.MapClaims{}
-	secret := []byte(os.Getenv("AUTH_JWT_SECRET"))
-	if secret == nil {
-		secret = []byte("dev-insecure-secret-please-replace-in-production")
+	// OJO: []byte("") NO es nil, asi que el `if secret == nil` original nunca
+	// disparaba y el test firmaba la verificacion con la clave vacia. El
+	// auth-service cae a su default cuando AUTH_JWT_SECRET esta vacia, asi
+	// que hay que replicar ese mismo fallback comparando el string.
+	secretStr := os.Getenv("AUTH_JWT_SECRET")
+	if secretStr == "" {
+		secretStr = "dev-insecure-secret-please-replace-in-production"
 	}
+	secret := []byte(secretStr)
 
 	parsed, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
 		return secret, nil
@@ -142,7 +154,7 @@ func TestGatewayLoginViaBackend(t *testing.T) {
 	}
 	jsonBody, _ := json.Marshal(body)
 
-	req, _ := http.NewRequest("POST", gatewayURL+"/api/auth/login", bytes.NewReader(jsonBody))
+	req, _ := http.NewRequest("POST", gatewayURL+"/api/login", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -250,11 +262,16 @@ func TestTokenReuseBetweenBackends(t *testing.T) {
 		t.Fatal("No se recibió cookie del auth-service")
 	}
 
+	// El token se usa como Bearer ademas de la cookie: cubre los dos
+	// transportes que acepta el forward_auth del gateway (Authorization y
+	// cookie auth_token) y evita que la variable quede declarada sin usar,
+	// que rompia la compilacion del paquete de tests.
 	token := authCookie.Value
 
 	// 2. Usar el token contra el Backend (/api/me)
 	reqMe, _ := http.NewRequest("GET", backendURL+"/api/me", nil)
 	reqMe.AddCookie(authCookie)
+	reqMe.Header.Set("Authorization", "Bearer "+token)
 	respMe, err := client.Do(reqMe)
 	if err != nil {
 		t.Fatalf("Error al llamar /api/me del Backend: %v", err)
@@ -271,6 +288,7 @@ func TestTokenReuseBetweenBackends(t *testing.T) {
 	// 3. Usar el token contra el SaaS (/api/saas/auth/me)
 	reqSaaS, _ := http.NewRequest("GET", saasURL+"/api/saas/auth/me", nil)
 	reqSaaS.AddCookie(authCookie)
+	reqSaaS.Header.Set("Authorization", "Bearer "+token)
 	respSaaS, err := client.Do(reqSaaS)
 	if err != nil {
 		t.Fatalf("Error al llamar /api/saas/auth/me del SaaS: %v", err)
@@ -294,7 +312,7 @@ func TestGatewayForwardAuth(t *testing.T) {
 	}
 	jsonBody, _ := json.Marshal(body)
 
-	reqLogin, _ := http.NewRequest("POST", gatewayURL+"/api/auth/login", bytes.NewReader(jsonBody))
+	reqLogin, _ := http.NewRequest("POST", gatewayURL+"/api/login", bytes.NewReader(jsonBody))
 	reqLogin.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -316,38 +334,62 @@ func TestGatewayForwardAuth(t *testing.T) {
 		t.Fatal("No se recibió cookie")
 	}
 
-	// 2. Acceder a endpoint protegido del Backend vía gateway
-	reqRed, _ := http.NewRequest("GET", gatewayURL+"/api/tx/red", nil)
-	reqRed.AddCookie(authCookie)
-	respRed, err := client.Do(reqRed)
+	// 2. Acceder a endpoint protegido del Backend vía gateway.
+	// Se usa /api/me y no /api/red: /api/me solo depende del token, mientras
+	// que /api/red devuelve 404 cuando la BD no tiene estructura de red
+	// sembrada, y ese 404 no dice nada sobre si el forward_auth funcionó.
+	reqMe, _ := http.NewRequest("GET", gatewayURL+"/api/me", nil)
+	reqMe.AddCookie(authCookie)
+	respMe, err := client.Do(reqMe)
 	if err != nil {
-		t.Fatalf("Error al llamar /api/tx/red: %v", err)
+		t.Fatalf("Error al llamar /api/me: %v", err)
 	}
-	defer respRed.Body.Close()
+	defer respMe.Body.Close()
 
-	if respRed.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(respRed.Body)
-		t.Errorf("Endpoint protegido del Backend falló con status %d: %s", respRed.StatusCode, string(bodyBytes))
+	if respMe.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(respMe.Body)
+		t.Errorf("Endpoint protegido del Backend falló con status %d: %s", respMe.StatusCode, string(bodyBytes))
 	} else {
 		t.Logf("✓ Gateway forward_auth funciona correctamente para Backend")
 	}
 
 	// 3. Verificar que sin cookie devuelve 401
-	reqRedNoAuth, _ := http.NewRequest("GET", gatewayURL+"/api/tx/red", nil)
-	respRedNoAuth, err := client.Do(reqRedNoAuth)
+	reqMeNoAuth, _ := http.NewRequest("GET", gatewayURL+"/api/me", nil)
+	respMeNoAuth, err := client.Do(reqMeNoAuth)
 	if err != nil {
-		t.Fatalf("Error al llamar /api/tx/red sin auth: %v", err)
+		t.Fatalf("Error al llamar /api/me sin auth: %v", err)
 	}
-	defer respRedNoAuth.Body.Close()
+	defer respMeNoAuth.Body.Close()
 
-	if respRedNoAuth.StatusCode != http.StatusUnauthorized {
-		t.Errorf("Endpoint protegido sin cookie debería devolver 401, obtuvo %d", respRedNoAuth.StatusCode)
+	if respMeNoAuth.StatusCode != http.StatusUnauthorized {
+		t.Errorf("Endpoint protegido sin cookie debería devolver 401, obtuvo %d", respMeNoAuth.StatusCode)
 	} else {
 		t.Logf("✓ Gateway rechaza correctamente requests sin token")
 	}
 }
 
 // Helper functions
+
+// readEnvFile busca KEY=value en el .env del proyecto (dos niveles arriba de
+// tests/integration). Devuelve "" si el archivo o la clave no existen.
+func readEnvFile(key string) string {
+	path := filepath.Join("..", "..", ".env")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if ok && strings.TrimSpace(k) == key {
+			return strings.Trim(strings.TrimSpace(v), `"'`)
+		}
+	}
+	return ""
+}
 
 func maskSecret(secret string) string {
 	if len(secret) <= 8 {
