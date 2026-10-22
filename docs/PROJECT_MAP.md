@@ -20,7 +20,7 @@
      │                 │                 │                 │
      ▼                 ▼                 ▼                 ▼
 ┌──────────┐    ┌──────────────┐  ┌──────────────┐    ┌──────────┐
-│ Backend/ │    │ auth-service/ │  │ Unidad3_SaaS/│    │ redis    │
+│ Backend/ │    │ auth-service/ │  │ fastAPI_SaaS/ │    │ redis    │
 │ Go/Fiber │    │ Go/Fiber      │  │ FastAPI      │    │ :6379    │
 │ :3000    │    │ :3001         │  │ :8000        │    └──────────┘
 └────┬─────┘    └──────┬───────┘  └──────┬───────┘
@@ -39,7 +39,7 @@
 | `Frontend/` | React 19 + Vite 8 + Tailwind 4 | 5173 | `Frontend/README.md` |
 | `Backend/` | Go/Fiber + pgx + redis | 3000 | `Backend/README.md` |
 | `auth-service/` | Go/Fiber + JWT + bcrypt | 3001 | `auth-service/README.md` |
-| `Unidad3_SaaS/` | FastAPI + SQLAlchemy 2 + Alembic | 8000 | `Unidad3_SaaS/README.md` |
+| `fastAPI_SaaS/` | FastAPI + SQLAlchemy 2 + Alembic | 8000 | `fastAPI_SaaS/README.md` |
 | `gateway/` | Caddy 2 | 8080 | `gateway/README.md` |
 
 ## Arquitectura detallada
@@ -88,7 +88,7 @@ bash tests/e2e/gateway_e2e.sh
 cd Backend && go test ./...
 
 # SaaS — correr tests
-cd Unidad3_SaaS && uv run pytest
+cd fastAPI_SaaS && uv run pytest
 
 # auth-service — correr tests
 cd auth-service && go test ./...
