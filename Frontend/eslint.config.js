@@ -19,4 +19,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Los primitivos de shadcn/ui exportan el componente y sus `*Variants`
+    // (contrato de la CLI). Es la convencion upstream: no se parte en dos
+    // archivos porque shadcn los reescribe al actualizar.
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])
