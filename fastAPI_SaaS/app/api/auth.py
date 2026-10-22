@@ -83,6 +83,17 @@ async def _proxy(request: Request, method: str, body: bytes | None) -> Response:
     upstream = f"{settings.auth_service_url.rstrip('/')}/auth{_stripped_path(request)}"
     client = _get_client()
 
+    # Limpiar el cookie jar antes de cada request. httpx.AsyncClient trae un
+    # jar propio: al proxear un login guardaba el `auth_token` de ese usuario
+    # y lo reenviaba en TODAS las requests siguientes, asi que
+    # /api/saas/auth/me respondia 200 con la identidad de ese usuario aunque
+    # el cliente no mandara token (sesion filtrada entre usuarios).
+    # `cookies=None` al construir el cliente NO alcanza: httpx igual crea un
+    # jar vacio que se vuelve a llenar. Limpiarlo aca deja la unica cookie
+    # que viaja como la que trae el request, que `_forward_headers` ya
+    # propaga explicitamente.
+    client.cookies.clear()
+
     try:
         upstream_resp = await client.request(
             method=method,
