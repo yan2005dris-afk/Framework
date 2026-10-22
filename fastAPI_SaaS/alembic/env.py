@@ -4,6 +4,13 @@ Conecta `Base.metadata` (declarativa de SQLAlchemy 2.x) con la BD gestionada
 por `app.core.config.settings`. La URL se lee de la env (via Settings)
 para tener una sola fuente de verdad entre el codigo y las migraciones.
 
+La URL es `settings.migration_database_url_sync`, o sea el DSN **de admin**
+(`SAAS_DB_ADMIN_*`), no el de runtime. Las migraciones crean tablas, roles y
+politicas: el rol de la app (`saas_app`) no tiene DDL a proposito y ademas es
+al que RLS le tiene que filtrar las filas en runtime. Si `alembic upgrade head`
+corriera con el rol de la app, la migracion `0004_saas_app_role` fallaria por
+permisos.
+
 Esto es la variante clasica de alembic env.py: soporta migraciones
 sincronicas (con `psycopg2`) y mantiene offline mode funcional via
 `render_as_batch` para Postgres.
@@ -18,7 +25,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 # Hacer que 'app' sea importable cuando se corre 'alembic upgrade head'
-# desde Unidad3_SaaS/. sys.path.insert(0, ...) cubre el caso en que alembic
+# desde fastAPI_SaaS/. sys.path.insert(0, ...) cubre el caso en que alembic
 # se invoque desde CWD distinto.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -30,8 +37,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Sobrescribir sqlalchemy.url con el DSN sync de nuestra config.
-config.set_main_option("sqlalchemy.url", settings.database_url_sync)
+# Sobrescribir sqlalchemy.url con el DSN sync de ADMIN de nuestra config.
+config.set_main_option("sqlalchemy.url", settings.migration_database_url_sync)
 
 target_metadata = Base.metadata
 
