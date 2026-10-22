@@ -23,17 +23,35 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// getEnvAny devuelve el valor de la primera variable de entorno definida de la
+// lista, o el fallback si ninguna lo está. Sirve para aceptar tanto el nombre
+// con prefijo de servicio (BACKEND_DB_HOST, el que publica docker-compose.yml y
+// el que ya usa scripts/apply_migrations.sh) como el nombre corto historico
+// (DB_HOST), sin romper a quien corra el binario fuera de compose.
+func getEnvAny(fallback string, keys ...string) string {
+	for _, key := range keys {
+		if val := os.Getenv(key); val != "" {
+			return val
+		}
+	}
+	return fallback
+}
+
 // ConnectDB carga variables de entorno, configura el pool de pgx y valida la conexión.
 func ConnectDB() (*pgxpool.Pool, error) {
 	// Intentamos cargar el archivo .env si existe (sin fallar si las variables ya vienen del entorno)
 	_ = godotenv.Load()
 
-	host := getEnv("DB_HOST", "localhost")
-	port := getEnv("DB_PORT", "5432")
-	user := getEnv("DB_USER", "postgres")
-	pass := getEnv("DB_PASSWORD", "postgres")
-	dbname := getEnv("DB_NAME", "multicatalogo")
-	sslmode := getEnv("DB_SSLMODE", "disable")
+	// El compose define BACKEND_DB_* (mismo prefijo que las migraciones);
+	// leer solo DB_HOST hacia que el binario cayera al default "localhost"
+	// dentro del contenedor y el pool nunca conectara, dejando /api/health
+	// en 503 y el gateway sin arrancar por depends_on: service_healthy.
+	host := getEnvAny("localhost", "BACKEND_DB_HOST", "DB_HOST")
+	port := getEnvAny("5432", "BACKEND_DB_PORT", "DB_PORT")
+	user := getEnvAny("postgres", "BACKEND_DB_USER", "DB_USER")
+	pass := getEnvAny("postgres", "BACKEND_DB_PASSWORD", "DB_PASSWORD")
+	dbname := getEnvAny("multicatalogo", "BACKEND_DB_NAME", "DB_NAME")
+	sslmode := getEnvAny("disable", "BACKEND_DB_SSLMODE", "DB_SSLMODE")
 
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", user, pass, host, port, dbname, sslmode)
 

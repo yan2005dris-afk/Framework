@@ -4,7 +4,9 @@ Bootstrap de la aplicacion:
 - Crea la instancia `app`.
 - Configura CORS con `AllowCredentials=True` y origenes por env
   (mismo patron que `Backend/main.go`).
-- Monta routers: `app/api/health.py` (T1) y `app/api/auth.py` (T2/GA6).
+- Monta routers: `app/api/health.py`, `app/api/auth.py` (proxy al
+  auth-service), `app/api/users.py` (CRUD multi-tenant) y
+  `app/api/billing.py` (planes y suscripciones).
 - `lifespan` queda como hook para DB engine startup/shutdown (T1.2).
 
 Para correr en dev:
@@ -19,8 +21,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import _close_client, router as auth_router
+from app.api.billing import router as billing_router
 from app.api.health import router as health_router
+from app.api.users import router as users_router
 from app.core.config import settings
+from app.middleware.tenant import set_tenant_context
 
 
 @asynccontextmanager
@@ -48,9 +53,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Middleware de aislamiento multi-tenant
+app.middleware("http")(set_tenant_context)
+
 # Routers
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(billing_router)
 
 
 @app.get("/")

@@ -25,7 +25,11 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 WORKDIR /home/auth
 ENV AUTH_SERVICE_PORT=3001
 EXPOSE 3001
+# 127.0.0.1 y no localhost: dentro del contenedor "localhost" resuelve a ::1
+# y el server escucha solo en IPv4, asi que wget no conecta y el healthcheck
+# falla para siempre. El comentario va FUERA de la continuacion de linea: un
+# comentario entre el HEALTHCHECK y su CMD rompe el parseo del Dockerfile.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD wget -qO- http://localhost:3001/auth/health || exit 1
+    CMD wget -qO- http://127.0.0.1:3001/auth/health || exit 1
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]
 CMD ["/usr/local/bin/auth-service"]

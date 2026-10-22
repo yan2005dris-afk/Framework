@@ -55,7 +55,7 @@ func (r *PostgresRepository) BuscarUsuarioPorEmail(email string) (*models.Usuari
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `SELECT id, email, password, rol FROM usuarios WHERE email = $1`
+	query := `SELECT id, email, password, rol FROM auth.users WHERE email = $1`
 	var user models.Usuario
 	err = pool.QueryRow(ctx, query, email).Scan(&user.ID, &user.Email, &user.Password, &user.Rol)
 	if err != nil {

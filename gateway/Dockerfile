@@ -20,10 +20,10 @@ ENV CADDY_PORT=8080
 
 EXPOSE 8080
 
-# Healthcheck: hit / y verificar 200 (Caddy siempre devuelve metadata
-# incluso cuando file_server 404; conviene un endpoint /health dedicado
-# en el gateway que llegue al upstream health, pero eso es GA7).
+# Healthcheck: /health es un endpoint dedicado del Caddyfile que responde 200
+# sin pasar por forward_auth. Antes apuntaba a /, que con forward_auth sin
+# matcher devolvia 401 y dejaba el contenedor unhealthy para siempre.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD wget -qO- http://localhost:8080/ || exit 1
+    CMD wget -qO- http://127.0.0.1:8080/health || exit 1
 
 CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]

@@ -110,12 +110,30 @@ Las FK cross-schema funcionan (Postgres las soporta dentro de la misma BD). Las 
 - Login/Logout/Me son **proxies HTTP** al auth-service (GA5).
 - El resto sigue usando `database_repository` con SQL real y `redis_cache` para Cache-Aside.
 
-#### `Unidad3_SaaS/` (FastAPI SaaS)
+#### `fastAPI_SaaS/` (FastAPI SaaS)
 
-- Python 3.11, FastAPI 0.115+, uvicorn, SQLAlchemy 2.x async, Alembic, httpx, pydantic v2.
-- Endpoints: `/health`, `/api/saas/health`, `/api/saas/auth/{login,logout,refresh,me}` (proxies HTTP al auth-service).
-- Modelos en `app/models/`: `tenant.py`, `user.py`, `base.py` con `TimestampMixin`.
-- Alembic con `migrations/0001_initial.py` que crea `tenants` + `users_saas`.
+- Python 3.11, FastAPI 0.115+, uvicorn, SQLAlchemy 2.x async, Alembic, httpx, pydantic v2, bcrypt.
+- Endpoints:
+  - `/health`, `/api/saas/health`
+  - `/api/saas/auth/{login,logout,refresh,me}` — proxies HTTP al auth-service
+  - `/api/saas/tenants/{tenant_id}/users` (CRUD) y `/api/saas/tenants/{tenant_id}/subscription`
+  - `/api/saas/plans`, `/api/saas/webhooks/stripe` (stub)
+- Identidad: **no** revalida el JWT. Lee los headers que el gateway copia desde
+  `forward_auth` (`X-User-Id`, `X-Email`, `X-Rol`, `X-Tenant-Id`, `X-Rol-Saas`)
+  y aplica `require_tenant_scope` / `require_tenant_admin`
+  (`app/deps/principal.py`).
+- Aislamiento multi-tenant en tres capas:
+  1. filtro `WHERE tenant_id = :tenant` en cada query del CRUD;
+  2. guards de scope/rol por endpoint (401/403) antes de tocar la BD;
+  3. RLS en Postgres (`0003_rls_policies`) con `FORCE ROW LEVEL SECURITY`, que
+     compara contra el GUC `app.current_tenant` que cada request setea con
+     `SET LOCAL`. Requiere que el servicio conecte con un rol **no superuser**
+     (migración `0004_saas_app_role`): un superuser ignora RLS.
+- Modelos en `app/models/`: `base.py` (con `TimestampMixin`), `tenant.py`,
+  `user.py`, `plan.py`, `subscription.py`.
+- Migraciones Alembic: `0001_initial` (tenants + users_saas), `0002_billing`
+  (plans + subscriptions + catálogo semilla), `0003_rls_policies`,
+  `0004_saas_app_role`.
 
 ### 5. Flujo de un request típico
 

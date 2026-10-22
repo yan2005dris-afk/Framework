@@ -12,9 +12,14 @@ authors = [
 dependencies = [
     "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.32,<1.0",
-    "pydantic>=2.9,<3.0",
+    # pydantic[email]: habilita EmailStr (validacion de dominio) usada en
+    # app/schemas/user.py y app/schemas/plan.py.
+    "pydantic[email]>=2.9,<3.0",
     "pydantic-settings>=2.6,<3.0",
-    "sqlalchemy>=2.0,<3.0",
+    # sqlalchemy[asyncio]: trae greenlet, requerido por el motor async
+    # de SQLAlchemy 2.x (app/core/db.py). Sin el extra, importar
+    # sqlalchemy.ext.asyncio lanza ImportError.
+    "sqlalchemy[asyncio]>=2.0,<3.0",
     "alembic>=1.13,<2.0",
     "asyncpg>=0.30,<1.0",
     "psycopg2-binary>=2.9,<3.0",
@@ -22,6 +27,8 @@ dependencies = [
     "python-multipart>=0.0.12,<1.0",
     # httpx: usado en runtime por app/api/auth.py para proxy al auth-service.
     "httpx>=0.27,<1.0",
+    # bcrypt: hashing de passwords para users_saas (app/crud/user.py).
+    "bcrypt>=4.1,<6.0",
 ]
 
 [dependency-groups]
@@ -40,5 +47,6 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"

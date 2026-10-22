@@ -34,8 +34,11 @@ Ambas capas pueden evolucionar independientemente. La SPA React consume hoy el B
 uv sync                          # crea .venv/ + instala deps
 cp .env.example .env             # editar SAAS_DB_PASSWORD etc. segun entorno
 
-# Necesitas Postgres corriendo en :5435 (o ajusta .env)
-uv run alembic upgrade head       # crea el esquema (tenants, users_saas)
+# Necesitas Postgres corriendo en :5435 (o ajusta .env).
+# `alembic upgrade head` usa las credenciales de admin (SAAS_DB_ADMIN_*), que
+# son las unicas con DDL; ademas crea y sincroniza el rol `saas_app` con el que
+# corre el servicio.
+uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
@@ -66,12 +69,29 @@ Ver `.env.example`. Convenciones:
 - **Prefijo `SAAS_`** para todo dato sensible: hosts, puertos, credenciales de BD.
 - **Sin prefijo** para metadatos públicos: `APP_ENV`, `CORS_ORIGINS`, `API_TITLE`.
 
-`database_url` y `database_url_sync` se construyen desde los 4 `SAAS_DB_*` para tener una sola fuente de verdad. Cambia el password de la BD en un solo lugar.
+La BD se accede con **dos identidades**, y mezclarlas rompe el aislamiento:
+
+| Identidad | Settings | Variables de entorno | Para qué |
+|---|---|---|---|
+| **App** (runtime) | `saas_db_user`, `saas_db_password` | `SAAS_DB_USER`, `SAAS_DB_PASSWORD` | Corre uvicorn. Rol **sin superuser** (default `saas_app`), que es lo que hace que las políticas RLS de la migración `0003` filtren. |
+| **App** (nombre del rol) | `saas_db_app_role` | `SAAS_DB_APP_ROLE` | Nombre del rol que crea y permiso la migración `0004_saas_app_role`. |
+| **Admin** | `saas_db_admin_user`, `saas_db_admin_password` | `SAAS_DB_ADMIN_USER`, `SAAS_DB_ADMIN_PASSWORD` | Solo Alembic: las migraciones hacen DDL (tablas, rol, políticas) y el rol de la app no puede ni debe poder. |
+
+`database_url` y `database_url_sync` se construyen desde los `SAAS_DB_*` de runtime;
+`migration_database_url_sync` es el mismo esquema con las credenciales de admin, y
+es la que usa `alembic/env.py`.
+
+**Por que importa**: un superuser de Postgres ignora las políticas RLS por
+completo (`FORCE ROW LEVEL SECURITY` ata al owner de la tabla, no al superuser).
+Si uvicorn conectara como `postgres`, cada request vería las filas de todos los
+tenants. Los tests `tests/integration/test_saas_rls_integration.py` lo cubren en
+los dos sentidos: con el rol de la app las políticas filtran, y con el superuser
+no filtran.
 
 ## Estructura
 
 ```
-Unidad3_SaaS/
+fastAPI_SaaS/
 ├── pyproject.toml          # uv-managed
 ├── README.md
 ├── Dockerfile              # uv-based multi-stage
@@ -81,8 +101,8 @@ Unidad3_SaaS/
 ├── app/
 │   ├── main.py             # FastAPI app, CORS, router mount
 │   ├── core/
-│   │   ├── config.py       # Pydantic Settings
-│   │   └── db.py           # async engine + get_db
+│   │   ├── config.py       # Pydantic Settings (runtime + admin)
+│   │   └── db.py           # async engine + get_db + get_tenant_db (GUC)
 │   ├── api/
 │   │   └── health.py
 │   ├── models/
@@ -94,7 +114,10 @@ Unidad3_SaaS/
 │   ├── env.py
 │   ├── script.py.mako
 │   └── versions/
-│       └── 0001_initial.py
+│       ├── 0001_initial.py
+│       ├── 0002_billing.py
+│       ├── 0003_rls_policies.py
+│       └── 0004_saas_app_role.py
 └── tests/
     ├── conftest.py
     └── test_health.py

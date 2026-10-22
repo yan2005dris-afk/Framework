@@ -14,7 +14,9 @@ no podra autogenerar la primera migracion.
 # Importar aca cada modelo nuevo para registrarlo en Base.metadata.
 # El orden importa: Tenant primero porque UserSaaS.tenants FK -> tenants.id.
 from app.models.base import Base, TimestampMixin  # noqa: F401
+from app.models.plan import Plan  # noqa: F401
+from app.models.subscription import Subscription  # noqa: F401
 from app.models.tenant import Tenant  # noqa: F401
 from app.models.user import UserSaaS  # noqa: F401
 
-__all__ = ["Base", "TimestampMixin", "Tenant", "UserSaaS"]
+__all__ = ["Base", "TimestampMixin", "Plan", "Subscription", "Tenant", "UserSaaS"]
