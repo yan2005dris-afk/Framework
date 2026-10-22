@@ -17,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.subscription import Subscription
     from app.models.user import UserSaaS
 
 
@@ -32,6 +33,13 @@ class Tenant(Base, TimestampMixin):
         back_populates="tenant",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+
+    # Relación: un Tenant tiene una Subscription (1:1)
+    subscription: Mapped["Subscription"] = relationship(
+        back_populates="tenant",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:
