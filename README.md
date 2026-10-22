@@ -40,10 +40,11 @@ curl -i -b /tmp/cookies.txt -X POST http://localhost:8080/auth/validate
 - **Estado del proyecto (features y pendientes)**: `docs/REQUIREMENTS_CHECKLIST.md`.
 - **Mapa del workspace**: `docs/PROJECT_MAP.md`.
 - **Backend B2C**: `Backend/README.md`.
-- **SaaS multi-tenant**: `Unidad3_SaaS/README.md`.
+- **SaaS multi-tenant**: `fastAPI_SaaS/README.md`.
 - **auth-service**: `auth-service/README.md`.
 - **gateway**: `gateway/README.md`.
 - **Logs de implementacion / decisiones**: `odd/tasks/`.
+- **Tests de integración de autenticación**: `tests/integration/README.md`.
 
 ## Estado del proyecto
 
