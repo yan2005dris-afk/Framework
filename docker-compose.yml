@@ -1,0 +1,160 @@
+# Docker Compose raiz para MultiCatalogo.
+#
+# Levanta los 6 servicios del stack:
+#   - gateway      (Caddy :8080 host)    - punto de entrada unico
+#   - auth-service (:3001)             - emision/validacion de JWTs
+#   - backend      (:3000)             - B2C: catalogo+checkout+MLM
+#   - saas-api     (:8000)             - SaaS multi-tenant
+#   - redis        (:6379)             - cache del Backend
+#   - db           (:5432)             - Postgres compartido
+#
+# Comandos utiles (desde la raiz del repo):
+#   docker compose up -d              # arranca todo
+#   docker compose up -d --build       # rebuild imagenes tras cambios en codigo
+#   docker compose logs -f gateway     # logs del gateway
+#   docker compose logs -f backend auth-service saas-api
+#   docker compose down                # baja todo, conserva volumenes
+#   docker compose down -v             # baja TODO incluyendo volumenes (reset)
+#
+# Como correr local sin todo el stack (manteniendo compatibilidad):
+#   docker compose up -d db redis        # solo infra
+#   cd Backend && go run main.go          # Backend nativo en :3000
+#   cd auth-service && go run main.go    # auth-service nativo en :3001
+#   cd Unidad3_SaaS && uv run uvicorn ... # SaaS nativo en :8000
+#   docker compose up gateway            # gateway Caddy en :8080 host
+#   # OJO: en este modo hay que mapear host -> servicio con /etc/hosts
+#   # o usar --network host. Lo mas simple: levantar todo via compose.
+
+services:
+
+  # ============================================================================
+  # INFRAESTRUCTURA
+  # ============================================================================
+
+  db:
+    image: postgres:16-alpine
+    container_name: multicatalogo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-multicatalogo}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      # init.sql del Backend se monta como docker-entrypoint-initdb.d.
+      # Solo se ejecuta la primera vez (cuando el volumen esta vacio).
+      - ./Backend/database/init.sql:/docker-entrypoint-initdb.d/01-backend-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-multicatalogo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:alpine
+    container_name: multicatalogo-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # APLICACIONES
+  # ============================================================================
+
+  auth-service:
+    build:
+      context: ./auth-service
+    container_name: multicatalogo-auth-service
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      AUTH_DB_HOST: db
+    ports:
+      - "${AUTH_SERVICE_PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/auth/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./Backend
+    container_name: multicatalogo-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      BACKEND_DB_HOST: db
+      REDIS_HOST: redis
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  saas-api:
+    build:
+      context: ./Unidad3_SaaS
+    container_name: multicatalogo-saas-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      SAAS_DB_HOST: db
+    command:
+      - sh
+      - -c
+      - |
+        uv run alembic upgrade head && \
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "${SAAS_API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/saas/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # GATEWAY
+  # ============================================================================
+
+  gateway:
+    build:
+      context: ./gateway
+    container_name: multicatalogo-gateway
+    restart: unless-stopped
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      saas-api:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    # Healthcheck contra /  - Caddy siempre responde; si los backends
+    # no responden, Caddy devuelve 502, que el healthcheck vera.
+
+volumes:
+  db_data:
+    name: multicatalogo_db_data

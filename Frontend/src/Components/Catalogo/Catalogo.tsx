@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useCart } from "../../Context/CartContext";
+import { useCart } from "../../Context/useCart";
 import { getProductos } from "../../services/productosService";
 import { categorias, type Producto } from "../../data/productos";
 

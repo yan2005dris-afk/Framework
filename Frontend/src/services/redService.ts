@@ -1,20 +1,12 @@
-import { API_BASE_URL } from './api';
-import type { Referido } from '../data/red';
+import { apiFetch } from "./http";
+import type { Referido } from "../data/red";
 
 /**
  * Obtiene el árbol jerárquico de la red multinivel desde el backend.
- * @returns {Promise<Referido>} Promesa con la raíz del árbol de referidos.
+ * Requiere cookie httpOnly válida (responde 401 sin sesión).
  */
-export const getRed = async (): Promise<Referido> => {
-  const response = await fetch(`${API_BASE_URL}/red`, {
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error('Error al obtener la red multinivel');
-  }
-
-  return response.json();
+export const getRed = async (
+  onUnauthorized?: () => void
+): Promise<Referido> => {
+  return apiFetch<Referido>("/red", { onUnauthorized });
 };

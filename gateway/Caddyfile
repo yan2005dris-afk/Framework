@@ -1,0 +1,62 @@
+# Caddyfile del API Gateway.
+#
+# Puntos de entrada:
+#   /api/tx/*   -> Backend Go/Fiber (B2C)   :3000
+#   /api/saas/* -> Unidad3 SaaS/FastAPI      :8000
+#   /           -> frontend estatico (placeholder; build real llega en U4)
+#
+# Auth centralizada:
+#   Cada request a /api/tx/* y /api/saas/* se valida via forward_auth
+#   al auth-service (:3001) que devuelve 200 + headers X-User-Id /
+#   X-User-Email / X-User-Rol / X-Tenant-Id / X-Rol-Saas si el token
+#   es valido (cookie auth_token o header Authorization: Bearer).
+#   Esos headers se copian al upstream (Caddy 'copy_headers') y los
+#   backends pueden leerlos via sus middleware propios.
+#
+# IMPORTANTE: sin TLS por ahora (dev en HTTP). U4 agrega auto_https.
+
+:8080 {
+
+    # --- Auth central --------------------------------------------------------------
+    # forward_auth envia un sub-request al auth-service. Si devuelve 200,
+    # Caddy copia los headers de la respuesta (X-User-*) al upstream via
+    # copy_headers. Si devuelve 401, Caddy responde 401 directo al cliente.
+    forward_auth auth-service:3001 {
+        uri /auth/validate
+        method POST
+        copy_headers X-User-Id X-User-Email X-User-Rol X-Tenant-Id X-Rol-Saas
+        # Para que el auth-service reciba el token del cliente:
+        # Caddy propaga los headers Authorization + Cookie. No hace falta
+        # 'header_up' explicito porque forward_auth los pasa por defecto.
+    }
+
+    # --- API routers ---------------------------------------------------------------
+    route {
+        # Backend Go/Fiber B2C (catalogo + checkout + MLM).
+        reverse_proxy /api/tx/* http://backend:3000 {
+            # Pasar info del request original al upstream.
+            header_up X-Forwarded-For {host}
+            header_up X-Real-IP {remote}
+        }
+
+        # SaaS FastAPI multi-tenant.
+        reverse_proxy /api/saas/* http://saas-api:8000 {
+            header_up X-Forwarded-For {host}
+            header_up X-Real-IP {remote}
+        }
+
+        # Frontend estatico (placeholder hasta U4 que traiga el build real).
+        # Caddyfile 2 usa 'file_server' + 'root' para servir /srv/frontend.
+        # En este PR el volumen /srv/frontend no se monta, asi que 404.
+        # Mantengo el bloque para que cuando U4 monte el dist, funcione.
+        root * /srv/frontend
+        file_server
+    }
+
+    # Logging estructurado (JSON-ish con timestamp).
+    log {
+        output stdout
+        level INFO
+        format console
+    }
+}

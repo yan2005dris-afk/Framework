@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useCart } from "../../Context/CartContext";
-import { useAuth } from "../../Context/AuthContext";
+import { useCart } from "../../Context/useCart";
+import { useAuth } from "../../Context/useAuth";
 import { Icon } from "../Share/Icon";
 
 interface NavbarProps {
@@ -95,7 +95,7 @@ const Navbar = ({ onToggleSidebar }: NavbarProps) => {
               </div>
               <button
                 onClick={handleLogout}
-                className="w-full text-left px-3 py-2 text-sm text-red-600 font-medium hover:bg-red-50 rounded-md transition-colors flex items-center gap-2"
+                className="w-full text-left min-h-[44px] px-3 py-2 text-sm text-red-600 font-medium hover:bg-red-50 rounded-md transition-colors flex items-center gap-2"
               >
                 <Icon name="log-out" size={16} />
                 Cerrar Sesión

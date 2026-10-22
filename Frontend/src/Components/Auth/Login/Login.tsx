@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth, type Rol } from "../../../Context/AuthContext";
+import { useAuth } from "../../../Context/useAuth";
+import type { Rol } from "../../../Context/auth-types";
 import { api } from "../../../services/api";
 
 /**
@@ -22,7 +23,9 @@ const Login = () => {
     try {
       const data = await api.login(email, password);
       const rol: Rol = data.rol === "admin" ? "admin" : "cliente";
-      login({ email: data.email, rol }, data.token);
+      // La cookie httpOnly la setea el backend; el frontend solo guarda
+      // email y rol para hidratar UI. El token nunca sale del backend.
+      login({ email: data.email, rol });
 
       // Redirigir según el rol del usuario
       navigate(rol === "admin" ? "/" : "/tienda");
@@ -87,7 +90,7 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+            className="w-full min-h-[44px] bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
           >
             {loading ? "Validando..." : "Iniciar Sesión"}
           </button>

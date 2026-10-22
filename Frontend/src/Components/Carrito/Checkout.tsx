@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useCart } from "../../Context/CartContext";
+import { useCart } from "../../Context/useCart";
+import { api } from "../../services/api";
 
 interface DatosEnvio {
   nombre: string;
@@ -33,6 +34,7 @@ const Checkout = () => {
     metodoPago: METODOS_PAGO[0],
   });
   const [procesando, setProcesando] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (cart.length === 0) {
     return (
@@ -54,19 +56,35 @@ const Checkout = () => {
     setDatos((prev) => ({ ...prev, [campo]: valor }));
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setProcesando(true);
+    setError(null);
 
-    setTimeout(() => {
+    try {
+      // Llamada al microservicio de transacciones ACID en Go
+      const resp = await api.checkout({
+        nombreCliente: datos.nombre,
+        emailCliente: datos.email,
+        direccion: datos.direccion,
+        ciudad: datos.ciudad,
+        telefono: datos.telefono,
+        metodoPago: datos.metodoPago,
+        items: cart.map((item) => ({
+          productoId: item.id,
+          cantidad: item.cantidad,
+          precio: item.precio,
+        })),
+      });
+
       const pedido = {
-        numero: `MC-${Date.now().toString().slice(-6)}`,
+        numero: resp.numero || `MC-${resp.pedidoId}`,
         items: cart.map((item) => ({
           nombre: item.nombre,
           cantidad: item.cantidad,
           precio: item.precio,
         })),
-        total: totalPrice,
+        total: resp.total || totalPrice,
         cliente: {
           nombre: datos.nombre,
           email: datos.email,
@@ -77,12 +95,33 @@ const Checkout = () => {
 
       clearCart();
       navigate("/confirmacion", { state: { pedido } });
-    }, 1200);
+    } catch (err: unknown) {
+      console.error("Error al procesar el checkout:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Error al procesar la compra en el servidor. Transacción cancelada."
+      );
+    } finally {
+      setProcesando(false);
+    }
   };
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-slate-800 mb-6">Finalizar Compra</h1>
+
+      {error && (
+        <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center justify-between">
+          <span>⚠️ {error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-500 font-bold ml-4 hover:text-red-700"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Formulario de envío */}

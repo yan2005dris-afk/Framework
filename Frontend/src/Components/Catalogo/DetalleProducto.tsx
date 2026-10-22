@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProductoById } from "../../services/productosService";
 import type { Producto } from "../../data/productos";
-import { useCart } from "../../Context/CartContext";
+import { useCart } from "../../Context/useCart";
 
 /**
  * Vista de detalle de producto con selector de galería y visualizador Lightbox interactivo.
@@ -149,7 +149,7 @@ const DetalleProducto = () => {
           onClick={() => setLightboxAbierto(false)}
         >
           <button
-            className="absolute top-5 right-5 text-white text-4xl hover:text-slate-300 transition"
+            className="absolute top-5 right-5 min-h-[44px] min-w-[44px] text-white text-4xl hover:text-slate-300 transition flex items-center justify-center"
             onClick={() => setLightboxAbierto(false)}
             aria-label="Cerrar"
           >
@@ -161,7 +161,7 @@ const DetalleProducto = () => {
               e.stopPropagation();
               handlePrev();
             }}
-            className="absolute left-4 md:left-10 text-white text-4xl hover:text-indigo-400 transition"
+            className="absolute left-4 md:left-10 min-h-[44px] min-w-[44px] text-white text-4xl hover:text-indigo-400 transition flex items-center justify-center"
             aria-label="Anterior"
           >
             ‹
@@ -179,7 +179,7 @@ const DetalleProducto = () => {
               e.stopPropagation();
               handleNext();
             }}
-            className="absolute right-4 md:right-10 text-white text-4xl hover:text-indigo-400 transition"
+            className="absolute right-4 md:right-10 min-h-[44px] min-w-[44px] text-white text-4xl hover:text-indigo-400 transition flex items-center justify-center"
             aria-label="Siguiente"
           >
             ›

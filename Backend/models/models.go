@@ -1,6 +1,8 @@
 // Package models define las estructuras de datos utilizadas en la aplicación.
 package models
 
+import "github.com/gofiber/fiber/v2"
+
 // LoginRequest define el cuerpo esperado para la autenticación de usuarios.
 type LoginRequest struct {
 	Email    string `json:"email"`
@@ -26,6 +28,41 @@ type Producto struct {
 	Galeria     []string `json:"galeria"`
 }
 
+// APIError estandariza los mensajes de error HTTP de la API.
+//
+// Status es el codigo HTTP a retornar y NO se serializa en el body
+// porque el cliente ya lo recibe en la response line. Solo Error y
+// Detalle (este ultimo opcional) llegan al JSON, manteniendo el shape
+// esperado por el frontend (`{"error": "...", "detalle": "..."}`).
+//
+// Use el metodo Write para responder consistentemente desde un controller:
+//
+//	return models.APIError{Status: 400, Error: "Cuerpo invalido"}.Write(c)
+type APIError struct {
+	Status  int
+	Error   string
+	Detalle interface{}
+}
+
+// Write serializa el error como JSON con el codigo HTTP correspondiente.
+// Si Detalle es nil o string vacio se omite del body (regla de omitempty
+// manejada manualmente para mantener el shape `{error, detalle?}` estable
+// independientemente del tipo de Detalle).
+func (e APIError) Write(c *fiber.Ctx) error {
+	body := fiber.Map{"error": e.Error}
+	if e.Detalle != nil {
+		switch v := e.Detalle.(type) {
+		case string:
+			if v != "" {
+				body["detalle"] = v
+			}
+		default:
+			body["detalle"] = v
+		}
+	}
+	return c.Status(e.Status).JSON(body)
+}
+
 // Referido define la estructura jerárquica de un miembro en la red multinivel.
 type Referido struct {
 	ID     int        `json:"id"`
@@ -42,4 +79,52 @@ type ReferidoRow struct {
 	Nivel    int
 	Ventas   float64
 	ParentID *int
+}
+
+// CheckoutItem representa un artículo en la solicitud de checkout.
+type CheckoutItem struct {
+	ProductoID int     `json:"productoId"`
+	Cantidad   int     `json:"cantidad"`
+	Precio     float64 `json:"precio"`
+}
+
+// CheckoutRequest define el cuerpo esperado para procesar una compra desde el frontend.
+type CheckoutRequest struct {
+	NombreCliente string         `json:"nombreCliente"`
+	EmailCliente  string         `json:"emailCliente"`
+	Direccion     string         `json:"direccion,omitempty"`
+	Ciudad        string         `json:"ciudad,omitempty"`
+	Telefono      string         `json:"telefono,omitempty"`
+	MetodoPago    string         `json:"metodoPago"`
+	Items         []CheckoutItem `json:"items"`
+}
+
+// CheckoutResponse representa la respuesta exitosa tras procesar el pedido.
+type CheckoutResponse struct {
+	PedidoID int     `json:"pedidoId"`
+	Numero   string  `json:"numero"`
+	Total    float64 `json:"total"`
+	Mensaje  string  `json:"mensaje"`
+}
+
+// Pedido representa la cabecera de una compra registrada en base de datos.
+type Pedido struct {
+	ID            int       `json:"id"`
+	UsuarioID     int       `json:"usuarioId"`
+	NombreCliente string    `json:"nombreCliente"`
+	EmailCliente  string    `json:"emailCliente"`
+	MetodoPago    string    `json:"metodoPago"`
+	Total         float64   `json:"total"`
+	Estado        string    `json:"estado"`
+	CreadoAt      string    `json:"creadoAt"`
+}
+
+// PedidoItem representa un item asociado a un pedido en base de datos.
+type PedidoItem struct {
+	ID             int     `json:"id"`
+	PedidoID       int     `json:"pedidoId"`
+	ProductoID     int     `json:"productoId"`
+	Cantidad       int     `json:"cantidad"`
+	PrecioUnitario float64 `json:"precioUnitario"`
+	Subtotal       float64 `json:"subtotal"`
 }
