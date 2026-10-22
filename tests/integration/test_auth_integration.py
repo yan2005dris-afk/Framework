@@ -170,7 +170,7 @@ class TestGatewayAuth:
     def test_gateway_login_backend(self, http_client):
         """Verifica login a través del gateway → Backend."""
         response = http_client.post(
-            f"{GATEWAY_URL}/api/auth/login",
+            f"{GATEWAY_URL}/api/login",
             json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
         )
 
@@ -190,7 +190,7 @@ class TestGatewayAuth:
     def test_gateway_forward_auth_with_token(self, http_client, auth_token):
         """Verifica que forward_auth del gateway funcione con token válido."""
         response = http_client.get(
-            f"{GATEWAY_URL}/api/tx/red",
+            f"{GATEWAY_URL}/api/me",
             cookies={"auth_token": auth_token},
         )
 
@@ -198,7 +198,7 @@ class TestGatewayAuth:
 
     def test_gateway_forward_auth_without_token(self, http_client):
         """Verifica que forward_auth del gateway rechace sin token."""
-        response = http_client.get(f"{GATEWAY_URL}/api/tx/red")
+        response = http_client.get(f"{GATEWAY_URL}/api/me")
 
         assert response.status_code == 401
 
@@ -244,7 +244,7 @@ class TestCrossServiceCompatibility:
         """Verifica que un token obtenido vía gateway funcione en ambos."""
         # Obtener token vía gateway
         response = http_client.post(
-            f"{GATEWAY_URL}/api/auth/login",
+            f"{GATEWAY_URL}/api/login",
             json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
         )
         assert response.status_code == 200

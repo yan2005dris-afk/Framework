@@ -36,6 +36,11 @@ dev = [
     "pytest>=8.3,<9.0",
     "pytest-asyncio>=0.24,<1.0",
     "aiosqlite>=0.20,<1.0",
+    # pyjwt: tests/integration/test_auth_integration.py decodifica los JWT
+    # que emite el auth-service para verificar claims y firma. Ningun
+    # proyecto lo declaraba, asi que la coleccion de pytest fallaba con
+    # ModuleNotFoundError: No module named 'jwt'.
+    "pyjwt>=2.9,<3.0",
 ]
 
 [build-system]
