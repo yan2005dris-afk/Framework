@@ -10,7 +10,7 @@
 -- 1. Tabla pedidos (cabecera de la compra)
 CREATE TABLE IF NOT EXISTS pedidos (
     id SERIAL PRIMARY KEY,
-    usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    usuario_id INT NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     nombre_cliente VARCHAR(255) NOT NULL,
     email_cliente VARCHAR(255) NOT NULL,
     metodo_pago VARCHAR(50) NOT NULL,

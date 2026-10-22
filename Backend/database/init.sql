@@ -1,14 +1,10 @@
 -- Inicialización del esquema y datos para multicatalogo
+--
+-- NOTA: La tabla 'usuarios' ha sido migrada al schema 'auth' gestionado por
+-- el auth-service. Este script ya no crea la tabla public.usuarios ni los seeds
+-- de usuarios. El Backend ahora consulta auth.users para autenticación.
 
--- 1. Tabla usuarios
-CREATE TABLE IF NOT EXISTS usuarios (
-    id SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    rol VARCHAR(50) NOT NULL
-);
-
--- 2. Tabla productos
+-- 1. Tabla productos
 CREATE TABLE IF NOT EXISTS productos (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(255) NOT NULL,
@@ -29,9 +25,14 @@ CREATE TABLE IF NOT EXISTS referidos (
 );
 
 -- 4. Tabla pedidos
+-- usuario_id NO lleva REFERENCES aqui: este script corre como
+-- docker-entrypoint-initdb.d, antes de que el auth-service cree auth.users.
+-- La FK hacia auth.users(id) la agrega la migracion
+-- database/migrations/003_migrate_to_auth_schema.sql, que corre en el
+-- entrypoint del Backend (ver Backend/scripts/apply_migrations.sh).
 CREATE TABLE IF NOT EXISTS pedidos (
     id SERIAL PRIMARY KEY,
-    usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    usuario_id INT NOT NULL,
     nombre_cliente VARCHAR(255) NOT NULL,
     email_cliente VARCHAR(255) NOT NULL,
     metodo_pago VARCHAR(50) NOT NULL,
@@ -49,19 +50,6 @@ CREATE TABLE IF NOT EXISTS pedido_items (
     precio_unitario NUMERIC(10, 2) NOT NULL,
     subtotal NUMERIC(10, 2) NOT NULL
 );
-
--- Datos semilla: usuarios
--- Las passwords '123456' están hasheadas con bcrypt (cost 10).
--- Generadas con: bcrypt.GenerateFromPassword([]byte("123456"), 10).
-INSERT INTO usuarios (id, email, password, rol) VALUES
-(1, 'admin@upse.edu.ec', '$2a$10$wYdwoYJp2ubHFZYw73enietm48txFvoAjiHZHgBsZaKvT2vpf3Mji', 'admin'),
-(2, 'cliente@upse.edu.ec', '$2a$10$7J26b3yIZQ5XC.aiRhqHsOyibUpKimgaC3mKqgrrZQbqqrnbFD2Ua', 'cliente')
-ON CONFLICT (id) DO UPDATE SET
-    email = EXCLUDED.email,
-    password = EXCLUDED.password,
-    rol = EXCLUDED.rol;
-
-SELECT setval('usuarios_id_seq', COALESCE((SELECT MAX(id) FROM usuarios), 1));
 
 -- Datos semilla: productos
 INSERT INTO productos (id, nombre, descripcion, precio, categoria, img, galeria) VALUES
