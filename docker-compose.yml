@@ -20,7 +20,7 @@
 #   docker compose up -d db redis        # solo infra
 #   cd Backend && go run main.go          # Backend nativo en :3000
 #   cd auth-service && go run main.go    # auth-service nativo en :3001
-#   cd Unidad3_SaaS && uv run uvicorn ... # SaaS nativo en :8000
+#   cd fastAPI_SaaS && uv run uvicorn ... # SaaS nativo en :8000
 #   docker compose up gateway            # gateway Caddy en :8080 host
 #   # OJO: en este modo hay que mapear host -> servicio con /etc/hosts
 #   # o usar --network host. Lo mas simple: levantar todo via compose.
@@ -97,6 +97,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # El entrypoint del Backend aplica database/migrations/*.sql, y la
+      # migracion 004 re-apunta la FK de pedidos a auth.users: la tabla que
+      # crea el entrypoint del auth-service. Sin esta dependencia el Backend
+      # puede arrancar antes y fallar con 'auth.users no existe' (el
+      # contenedor reintenta, pero es un reinicio avoidable).
+      auth-service:
+        condition: service_healthy
     env_file: .env
     environment:
       BACKEND_DB_HOST: db
@@ -111,7 +118,9 @@ services:
 
   saas-api:
     build:
-      context: ./Unidad3_SaaS
+      # El directorio se renombro de Unidad3_SaaS a fastAPI_SaaS (PR #29);
+      # con el path viejo el build fallaba.
+      context: ./fastAPI_SaaS
     container_name: multicatalogo-saas-api
     restart: unless-stopped
     depends_on:
@@ -120,12 +129,21 @@ services:
     env_file: .env
     environment:
       SAAS_DB_HOST: db
+    # Dos identidades, en este orden:
+    #   1. alembic con el rol ADMIN (SAAS_DB_ADMIN_*): las migraciones hacen
+    #      DDL (crean tablas, rol y politicas RLS) y eso no lo puede hacer el
+    #      rol de la app.
+    #   2. uvicorn con el rol de la APP (SAAS_DB_USER/SAAS_DB_PASSWORD, que en
+    #      .env es saas_app). Con un superuser las politicas RLS de la
+    #      migracion 0003 quedan inertes y cada request ve todos los tenants.
     command:
       - sh
       - -c
       - |
-        uv run alembic upgrade head && \
-        uvicorn app.main:app --host 0.0.0.0 --port 8000
+        SAAS_DB_ADMIN_USER="$${SAAS_DB_ADMIN_USER:-postgres}" \
+        SAAS_DB_ADMIN_PASSWORD="$${SAAS_DB_ADMIN_PASSWORD:-postgres}" \
+          uv run alembic upgrade head && \
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
       - "${SAAS_API_PORT:-8000}:8000"
     healthcheck:
