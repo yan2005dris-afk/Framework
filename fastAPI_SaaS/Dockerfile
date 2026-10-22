@@ -15,6 +15,9 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
 # Capa 2: instalar el proyecto en si mismo (importable como 'app')
+# El README se copia porque pyproject.toml declara `readme = "README.md"` y
+# hatchling falla el build del paquete si el archivo no esta en el contexto.
+COPY README.md ./README.md
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini

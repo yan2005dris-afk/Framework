@@ -82,7 +82,9 @@ services:
     ports:
       - "${AUTH_SERVICE_PORT:-3001}:3001"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3001/auth/health"]
+      # 127.0.0.1 y no localhost: dentro del contenedor "localhost" resuelve a
+      # ::1 y el server escucha solo en IPv4, asi que wget no conecta.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/auth/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -111,7 +113,7 @@ services:
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -147,7 +149,10 @@ services:
     ports:
       - "${SAAS_API_PORT:-8000}:8000"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/saas/health"]
+      # La imagen del SaaS (uv + bookworm-slim) no trae wget: se usa el
+      # python del propio venv. Con wget el contenedor queda unhealthy para
+      # siempre y `depends_on` nunca lo da por listo.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/saas/health').read()"]
       interval: 15s
       timeout: 5s
       retries: 5

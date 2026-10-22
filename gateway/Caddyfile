@@ -21,13 +21,25 @@
     # forward_auth envia un sub-request al auth-service. Si devuelve 200,
     # Caddy copia los headers de la respuesta (X-User-*) al upstream via
     # copy_headers. Si devuelve 401, Caddy responde 401 directo al cliente.
-    forward_auth auth-service:3001 {
+    #
+    # El matcher /api/* es obligatorio: sin el, forward_auth cubre TODO el
+    # sitio, incluido / y /health, y entonces el healthcheck del contenedor
+    # recibe 401 para siempre (contenedor unhealthy permanente) y el frontend
+    # estatico queda detras de auth sin necesidad. Solo las APIs se protegen.
+    forward_auth /api/* auth-service:3001 {
         uri /auth/validate
         method POST
         copy_headers X-User-Id X-User-Email X-User-Rol X-Tenant-Id X-Rol-Saas
         # Para que el auth-service reciba el token del cliente:
         # Caddy propaga los headers Authorization + Cookie. No hace falta
         # 'header_up' explicito porque forward_auth los pasa por defecto.
+    }
+
+    # --- Health del propio gateway --------------------------------------------------
+    # Endpoint sin auth para el HEALTHCHECK del Dockerfile. Responde 200 mientras
+    # Caddy este vivo; no toca los upstreams (para eso estan sus healthchecks).
+    handle /health {
+        respond "ok" 200
     }
 
     # --- API routers ---------------------------------------------------------------
