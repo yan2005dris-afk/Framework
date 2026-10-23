@@ -119,6 +119,7 @@
         @protected {
             path /api/*
             not path /api/login
+            not path /api/register
             not path /api/logout
             not path /api/health
             not path /api/productos
