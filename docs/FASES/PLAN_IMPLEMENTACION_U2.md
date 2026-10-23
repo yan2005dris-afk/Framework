@@ -185,13 +185,13 @@
 | Fase | Entregable | Estado |
 |---|---|---|
 | 0 | Migración `004_backoffice.sql` aplicada (+ secuencia `referidos_id_seq`) | ✅ 2026-10-16 |
-| 1 | Registro + referido real (verificado: `?ref=LUIS` → parent_id=2, 409/400) | ✅ 2026-10-16 |
-| 2 | CRUD productos admin (POST/PUT/DELETE-lógico, `?q=` ILIKE, invalida caché) | ✅ 2026-10-16 |
-| 3 | Pedidos: `/mios`, admin, detalle dueño-only, estados, cancelar→stock+clawback | ✅ 2026-10-16 |
-| 4 | Ledger `comisiones` en la tx + `/red/mia` + `domain.RepartirComisiones` pura | ✅ 2026-10-16 |
-| 5 | Liquidaciones `pendiente→pagada` (idempotente, bloqueo FOR UPDATE) | ✅ 2026-10-16 |
-| 6 | Reportes SQL reales + Dashboard consumiendo `/api/reportes/*` | ✅ 2026-10-16 |
-| 7 | `Pagina{data,page,limit,total}` + `?q=` admin + auditoría de rutas | ✅ 2026-10-16 |
+| 1 | Registro + referido real (POST /api/register con código upline y hash bcrypt) | ✅ 2026-10-23 |
+| 2 | CRUD productos admin (POST/PUT/DELETE-lógico, `?q=` ILIKE, invalida caché) | ✅ 2026-10-23 |
+| 3 | Pedidos: `/mios`, admin, detalle dueño-only, estados, cancelar→stock+clawback | ✅ 2026-10-23 |
+| 4 | Ledger `comisiones` en la tx + `/red/mia` + cálculo multinivel 10/5/2% | ✅ 2026-10-23 |
+| 5 | Liquidaciones `pendiente→pagada` (idempotente, bloqueo FOR UPDATE) | ✅ 2026-10-23 |
+| 6 | Reportes SQL reales (resumen, top-productos, top-referidos, deuda) | ✅ 2026-10-23 |
+| 7 | Búsqueda server-side `?q=` con ILIKE + auditoría RequireAuth/RequireAdmin | ✅ 2026-10-23 |
 
 > **Nota F7:** la búsqueda `?q=` se implementó en `/api/admin/productos`
 > (donde aporta valor operativo); el catálogo público sigue cacheado completo.

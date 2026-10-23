@@ -11,7 +11,7 @@ type DatabaseRepository interface {
 	BuscarUsuarioPorEmail(email string) (*models.Usuario, error)
 	RegistrarUsuario(req models.RegisterRequest, hashedPassword string) (*models.Usuario, error)
 	ObtenerProductos() ([]models.Producto, error)
-	ObtenerProductosAdmin() ([]models.Producto, error)
+	ObtenerProductosAdmin(query string) ([]models.Producto, error)
 	ObtenerProductoPorID(id int) (*models.Producto, error)
 	CrearProducto(req models.ProductoRequest) (*models.Producto, error)
 	ActualizarProducto(id int, req models.ProductoRequest) (*models.Producto, error)

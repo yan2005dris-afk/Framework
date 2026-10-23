@@ -17,7 +17,7 @@ type MockProdRepo struct {
 	CrearProductoFunc      func(req models.ProductoRequest) (*models.Producto, error)
 	ActualizarProductoFunc func(id int, req models.ProductoRequest) (*models.Producto, error)
 	EliminarProductoFunc   func(id int) error
-	ObtenerAdminFunc       func() ([]models.Producto, error)
+	ObtenerAdminFunc       func(string) ([]models.Producto, error)
 }
 
 func (m *MockProdRepo) CrearProducto(req models.ProductoRequest) (*models.Producto, error) {
@@ -57,9 +57,9 @@ func (m *MockProdRepo) EliminarProductoLogico(id int) error {
 	return nil
 }
 
-func (m *MockProdRepo) ObtenerProductosAdmin() ([]models.Producto, error) {
+func (m *MockProdRepo) ObtenerProductosAdmin(q string) ([]models.Producto, error) {
 	if m.ObtenerAdminFunc != nil {
-		return m.ObtenerAdminFunc()
+		return m.ObtenerAdminFunc(q)
 	}
 	return []models.Producto{
 		{ID: 1, Nombre: "Prod 1", Activo: true},
@@ -150,5 +150,38 @@ func TestEliminarProducto_Logico(t *testing.T) {
 
 	if !cache.delCalled || cache.lastDelKey != "productos:all" {
 		t.Errorf("debe invalidar caché tras eliminación lógica")
+	}
+}
+
+func TestGetProductosAdmin_ConFiltroBusqueda(t *testing.T) {
+	app := fiber.New()
+	busquedaRecibida := ""
+	repo := &MockProdRepo{
+		ObtenerAdminFunc: func(q string) ([]models.Producto, error) {
+			busquedaRecibida = q
+			return []models.Producto{
+				{ID: 1, Nombre: "Serum Rejuvenecedor", Activo: true},
+			}, nil
+		},
+	}
+	ctrl := NewProductoController(repo, nil, "dev")
+
+	app.Get("/admin/productos", func(c *fiber.Ctx) error {
+		c.Locals(middleware.LocalRol, "admin")
+		return ctrl.GetProductosAdmin(c)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/productos?q=Serum", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("error en app.Test: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("esperado 200 OK, recibido %d", resp.StatusCode)
+	}
+
+	if busquedaRecibida != "Serum" {
+		t.Errorf("esperado parametro de busqueda 'Serum', recibido '%s'", busquedaRecibida)
 	}
 }

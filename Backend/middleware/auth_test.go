@@ -35,7 +35,7 @@ func (s *stubDBRepo) BuscarUsuarioPorEmail(email string) (*models.Usuario, error
 // los invoca en estos tests.
 func (s *stubDBRepo) ObtenerProductos() ([]models.Producto, error)              { return nil, nil }
 func (s *stubDBRepo) ObtenerProductoPorID(int) (*models.Producto, error)       { return nil, nil }
-func (s *stubDBRepo) ObtenerProductosAdmin() ([]models.Producto, error) { return nil, nil }
+func (s *stubDBRepo) ObtenerProductosAdmin(string) ([]models.Producto, error) { return nil, nil }
 func (s *stubDBRepo) CrearProducto(req models.ProductoRequest) (*models.Producto, error) { return nil, nil }
 func (s *stubDBRepo) ActualizarProducto(int, models.ProductoRequest) (*models.Producto, error) { return nil, nil }
 func (s *stubDBRepo) EliminarProductoLogico(int) error { return nil }

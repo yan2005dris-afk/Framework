@@ -107,14 +107,15 @@ func GetProductoByID(c *fiber.Ctx) error {
 	return ctrl.GetProductoByID(c)
 }
 
-// GetProductosAdmin retorna todos los productos incluidos inactivos (Solo Admin).
+// GetProductosAdmin retorna todos los productos incluidos inactivos con soporte de búsqueda ?q= (Solo Admin).
 func (pc *ProductoController) GetProductosAdmin(c *fiber.Ctx) error {
 	rol, ok := c.Locals(middleware.LocalRol).(string)
 	if !ok || rol != "admin" {
 		return models.APIError{Status: fiber.StatusForbidden, Error: "Se requieren permisos de administrador"}.Write(c)
 	}
 
-	productos, err := pc.dbRepo.ObtenerProductosAdmin()
+	q := c.Query("q", "")
+	productos, err := pc.dbRepo.ObtenerProductosAdmin(q)
 	if err != nil {
 		public, detail := helpers.SanitizeErrorDetails(pc.appEnv, err)
 		return models.APIError{Status: fiber.StatusInternalServerError, Error: public, Detalle: detail}.Write(c)

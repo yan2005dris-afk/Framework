@@ -739,8 +739,8 @@ func (r *PostgresRepository) ListarLiquidacionesPorReferido(referidoID int) ([]m
 	return liquidaciones, nil
 }
 
-// ObtenerProductosAdmin retorna todos los productos incluidos los inactivos (Backoffice Admin).
-func (r *PostgresRepository) ObtenerProductosAdmin() ([]models.Producto, error) {
+// ObtenerProductosAdmin retorna todos los productos incluidos los inactivos con búsqueda opcional por nombre o categoría (Backoffice Admin).
+func (r *PostgresRepository) ObtenerProductosAdmin(busqueda string) ([]models.Producto, error) {
 	pool, err := r.getPool()
 	if err != nil {
 		return nil, err
@@ -749,9 +749,19 @@ func (r *PostgresRepository) ObtenerProductosAdmin() ([]models.Producto, error) 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
-	           FROM productos ORDER BY id ASC`
-	rows, err := pool.Query(ctx, query)
+	var rows pgx.Rows
+	if busqueda != "" {
+		qPattern := "%" + busqueda + "%"
+		query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
+		           FROM productos 
+		           WHERE nombre ILIKE $1 OR categoria ILIKE $1 
+		           ORDER BY id ASC`
+		rows, err = pool.Query(ctx, query, qPattern)
+	} else {
+		query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
+		           FROM productos ORDER BY id ASC`
+		rows, err = pool.Query(ctx, query)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("error al consultar productos admin: %w", err)
 	}
