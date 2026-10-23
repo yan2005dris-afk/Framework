@@ -6,6 +6,7 @@ import { useAuth } from "@/Context/useAuth";
 import { UpdateBanner } from "@/Components/Pwa/UpdateBanner";
 import { OfflineGuard } from "@/Components/Pwa/OfflineGuard";
 import { CheckoutRetryWatcher } from "@/Components/Pwa/CheckoutRetryWatcher";
+import { PwaFloatingButton } from "@/Components/Pwa/PwaFloatingButton";
 import { router } from "@/router";
 
 /**
@@ -66,6 +67,8 @@ export const AppShell = () => (
       <OfflineGuard />
       {/* Reintenta los checkouts que quedaron a medio enviar (U4-T3). */}
       <CheckoutRetryWatcher />
+      {/* Botón flotante para instalar / descargar PWA (siempre accesible). */}
+      <PwaFloatingButton />
       <RouterBridge />
     </CartBoundary>
   </AuthProvider>

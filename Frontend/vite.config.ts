@@ -33,16 +33,12 @@ export default defineConfig(({ mode }) => {
 
       // U4-T3: convierte el SPA en una PWA instalable.
       VitePWA({
-        // `prompt` y no `autoUpdate`: el service worker NO se queda con la
-        // version nueva en silencio, avisa y la app decide cuando recargar.
-        // Es lo que habilita el banner de actualizacion (main.tsx).
-        registerType: 'prompt',
-        // El registro es manual: `registerSW` en main.tsx, no el script que
-        // inyecta el plugin. Con `null` el plugin no mete nada.
-        injectRegister: null,
-        // El manifest ya vive en `public/manifest.json` y lo enlaza el
-        // index.html a mano. Dejarlo en false evita tener dos manifests que
-        // pueden desincronizarse sin que nadie se entere.
+        // `autoUpdate`: el service worker toma el control inmediatamente
+        // y precachea todos los recursos en segundo plano sin esperar a que
+        // el usuario cierre todas las pestañas.
+        registerType: 'autoUpdate',
+        // Inyecta el registro automáticamente en el HTML
+        injectRegister: 'auto',
         manifest: false,
         workbox: {
           // Los .woff2 van aparte porque @fontsource los carga en runtime y no
@@ -51,10 +47,13 @@ export default defineConfig(({ mode }) => {
           // Toda navegacion offline entrega el index.html del propio build, no
           // una copia vieja de un cache separado.
           navigateFallback: '/index.html',
-          // Explicito aunque navigateFallback solo.apply a navegaciones: si
+          // Explicito aunque navigateFallback solo aplica a navegaciones: si
           // alguien enruta /api al fallback, un 404 de API se vuelve un 200 de
           // HTML y el error se deforma en el cliente.
           navigateFallbackDenylist: [/^\/api\//],
+          // Reclamar inmediatamente a todos los clientes abiertos en cuanto se active
+          clientsClaim: true,
+          skipWaiting: true,
           runtimeCaching: [
             {
               // Detalle de un producto: cambia poco y se mira mucho. Se sirve
