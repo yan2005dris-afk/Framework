@@ -24,6 +24,7 @@ export type NavPath =
   | "/catalogo"
   | "/mi-red"
   | "/carrito"
+  | "/admin/productos"
   | "/saas"
   | "/planes"
   | "/usuarios-saas";
@@ -56,6 +57,7 @@ interface SidebarContentProps {
 
 const navMenu: NavGroupItem[] = [
   { name: "Dashboard", path: "/", icon: "layout-dashboard", soloAdmin: true },
+  { name: "Gestión Productos", path: "/admin/productos", icon: "store", soloAdmin: true },
   {
     name: "Panel SaaS",
     icon: "shield",

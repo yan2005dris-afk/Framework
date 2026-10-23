@@ -1,3 +1,26 @@
+export interface ProductoAdminDTO {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  precio: number;
+  categoria: string;
+  img: string;
+  galeria: string[];
+  activo: boolean;
+  stock: number;
+}
+
+export interface GuardarProductoPayload {
+  nombre: string;
+  descripcion: string;
+  precio: number;
+  categoria: string;
+  img: string;
+  galeria?: string[];
+  stock?: number;
+  activo?: boolean;
+}
+
 export interface RegisterRequest {
   nombre: string;
   email: string;
@@ -97,6 +120,47 @@ export const api = {
    * GET /api/productos
    * Catálogo completo desde el backend con Cache-Aside.
    */
+  /**
+   * GET /api/admin/productos?q=
+   * Catálogo completo para el backoffice admin con búsqueda.
+   */
+  getProductosAdmin(q?: string): Promise<ProductoAdminDTO[]> {
+    const query = q ? `?q=${encodeURIComponent(q)}` : "";
+    return apiFetch<ProductoAdminDTO[]>(`/admin/productos${query}`, { method: "GET" });
+  },
+
+  /**
+   * POST /api/productos
+   * Crear nuevo producto en el catálogo.
+   */
+  crearProducto(payload: GuardarProductoPayload): Promise<ProductoAdminDTO> {
+    return apiFetch<ProductoAdminDTO>("/productos", {
+      method: "POST",
+      json: payload,
+    });
+  },
+
+  /**
+   * PUT /api/productos/:id
+   * Actualizar producto existente.
+   */
+  actualizarProducto(id: number, payload: Partial<GuardarProductoPayload>): Promise<ProductoAdminDTO> {
+    return apiFetch<ProductoAdminDTO>(`/productos/${id}`, {
+      method: "PUT",
+      json: payload,
+    });
+  },
+
+  /**
+   * DELETE /api/productos/:id
+   * Borrado lógico (activo=false).
+   */
+  eliminarProductoLogico(id: number): Promise<{ mensaje: string }> {
+    return apiFetch<{ mensaje: string }>(`/productos/${id}`, {
+      method: "DELETE",
+    });
+  },
+
   getProductos(): Promise<Producto[]> {
     return apiFetch<Producto[]>("/productos", { method: "GET" });
   },
