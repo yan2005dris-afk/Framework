@@ -67,13 +67,14 @@ COPY gateway/Caddyfile /etc/caddy/Caddyfile
 # cliente (/catalogo, /mi-red, /producto/:id).
 COPY --from=frontend /build/Frontend/dist /srv/frontend
 
-# Por defecto Caddy escucha en :2019 (HTTP) y :443 (HTTPS). Cambiamos a 8080
-# explicito via env. Si QUEREMOS que el Dockerfile arranque Caddy solo,
-# podriamos sobreescribir CMD, pero por defecto heredado es OK con
-# 'caddy run --config /etc/caddy/Caddyfile' desde el entrypoint base.
-ENV CADDY_PORT=8080
-
-EXPOSE 8080
+# El puerto de escucha lo decide el Caddyfile, via SITE_ADDRESS: 8080 en
+# desarrollo (el default) y 443 cuando hay un dominio real. Se eliminó el
+# `ENV CADDY_PORT=8080` que estaba aca: Caddy no lee ninguna variable con ese
+# nombre, asi que no hacia nada.
+#
+# EXPOSE es documentacion para el humano, no una publicacion de puerto: el
+# que realmente expone el stack es `ports:` en docker-compose.yml.
+EXPOSE 8080 443 80
 
 # Healthcheck: /health es un endpoint dedicado del Caddyfile que responde 200
 # sin pasar por forward_auth. Antes apuntaba a /, que con forward_auth sin

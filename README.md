@@ -37,6 +37,7 @@ curl -i -b /tmp/cookies.txt -X POST http://localhost:8080/auth/validate
 ## Documentacion por area
 
 - **Arquitectura completa (diagramas + request flow)**: `docs/architecture.md`.
+- **Operacion (levantar el stack, TLS, rate limit, logs, despliegue)**: `docs/operacion.md`.
 - **Estado del proyecto (features y pendientes)**: `docs/REQUIREMENTS_CHECKLIST.md`.
 - **Mapa del workspace**: `docs/PROJECT_MAP.md`.
 - **Backend B2C**: `Backend/README.md`.

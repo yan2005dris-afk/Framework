@@ -1,0 +1,34 @@
+# .dockerignore del servicio Backend.
+#
+# El builder del Dockerfile hace `COPY . .` (necesita todo el codigo Go), asi
+# que sin este archivo el CONTEXTO de build es el directorio entero. Eso
+# incluye:
+#
+#   - `.env`, que esta en el .gitignore del repo pero NO en el contexto: es el
+#     archivo con el JWT secret y las credenciales de Postgres. No llega a la
+#     imagen final (el stage final solo copia el binario), pero viaja al daemon
+#     y queda en el build cache de cada maquina que compila la imagen.
+#   - el binario `multicatalogo-backend` de una corrida local, que pesa 11MB y
+#     no lo necesita nadie.
+#
+# Mismo criterio que el .dockerignore de la raiz, que existe por el mismo
+# motivo con el contexto del gateway.
+
+# --- Secretos -----------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Artefactos de compilacion local ------------------------------------------
+multicatalogo-backend
+*.exe
+*.exe~
+*.test
+*.out
+tmp/
+
+# --- Entornos virtuales y tooling ---------------------------------------------
+.venv/
+__pycache__/
+.pytest_cache/
+.vscode/

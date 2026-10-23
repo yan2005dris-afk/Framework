@@ -29,9 +29,38 @@
 #   `/api/saas/plans` NO es excepcion: el catalogo no es tenant-scoped, pero
 #   si exige identidad (S10 + tests de billing esperan 401 sin token).
 #
-# IMPORTANTE: sin TLS por ahora (dev en HTTP). U4 agrega auto_https.
+# TLS (#20). La direccion del sitio sale del entorno, no del archivo, para no
+# tener dos Caddyfiles que se separan con el tiempo:
+#
+#   - Sin SITE_ADDRESS (desarrollo, el default): `http://localhost:8080`, HTTP
+#     plano. Es exactamente el comportamiento previo a U4.
+#   - Con SITE_ADDRESS=api.tudominio.com y ACME_EMAIL=vos@tudominio.com:
+#     Caddy pide el certificado a Let's Encrypt por HTTP-01 (puerto 80) y lo
+#     renueva solo. Pasar a produccion es cambiar dos variables del `.env`,
+#     no editar este archivo.
+#
+# OJO: la variable no puede quedar DEFINIDA VACIA. Si SITE_ADDRESS existe pero
+# esta vacio, el placeholder no resuelve, el bloque se interpreta como site
+# global y Caddy ni arranca ("unrecognized global option"). Para no publicar
+# TLS, la linea se comenta en el `.env`; nunca se deja en blanco.
+{$SITE_ADDRESS:http://localhost:8080} {
 
-:8080 {
+    # TLS (#20). Hay un solo interruptor, ACME_EMAIL, y tres modos:
+    #
+    #   - Sin SITE_ADDRESS (desarrollo): `http://localhost:8080`. auto_https se
+    #     apaga solo por la direccion http, asi que esta linea no hace nada.
+    #   - Con SITE_ADDRESS=https://localhost:8443 y sin ACME_EMAIL: el default
+    #     `internal` emite un certificado de la CA interna de Caddy. Es el TLS
+    #     local de S7: no depende de un dominio publico, y el browser avisa que
+    #     no confia en la CA (se acepta una vez por maquina).
+    #   - Con SITE_ADDRESS=api.tudominio.com y ACME_EMAIL=vos@tudominio.com:
+    #     Let's Encrypt por HTTP-01, con renovacion automatica.
+    #
+    # AVISO: `internal` es el default y por eso mismo es un modo de
+    # DESARROLLO. Un deploy real con el dominio puesto y ACME_EMAIL olvidado
+    # emite un certificado que ningun browser confia: no es un error visible,
+    # es un sitio que no abre. Si publicas, ACME_EMAIL va en el `.env`.
+    tls {$ACME_EMAIL:internal}
 
     # Todo va dentro de un unico `route` a proposito. Caddy ordena las
     # directivas por tipo (no por el orden en que se escriben), asi que un
@@ -108,9 +137,32 @@
 
         # --- API routers --------------------------------------------------------
         # SaaS primero: /api/saas/* es mas especifico que /api/* y debe ganar.
+        #
+        # Active health checks (#21): cada upstream declara por que path se lo
+        # puede interrogar. `health_uri` NO es el path que se proxea: es el que
+        # Caddy consulta directo al upstream, asi que aca son los mismos paths
+        # que ya usan los healthchecks de docker-compose.
+        #
+        # Que compra: cuando un upstream deja de responder, Caddy lo saca de la
+        # rotacion en `health_interval` segundos, en vez de esperar a que llegue
+        # un request real y responderle un 502. Con un solo upstream por grupo
+        # no hay rotacion que repartir: el sintoma cambia de "502 con el error
+        # del upstream" a "503 no healthy upstream", que es el que corresponde
+        # cuando el servicio esta caido.
         reverse_proxy /api/saas/* http://saas-api:8000 {
             header_up X-Forwarded-For {host}
             header_up X-Real-IP {remote}
+
+            # El health del SaaS responde 200 mientras el proceso atienda; no
+            # chequea Postgres ni Redis. Detecta el proceso colgado, que es lo
+            # que este health check puede afirmar sin mentir.
+            health_uri /api/saas/health
+            health_interval 10s
+            health_timeout 5s
+            health_status 200
+            # Con un upstream solo no cambia nada; queda explicito para cuando
+            # haya mas de una replica del SaaS.
+            lb_policy round_robin
         }
 
         # Backend Go/Fiber B2C (catalogo + checkout + MLM). Sin rewrite: el
@@ -118,6 +170,20 @@
         reverse_proxy /api/* http://backend:3000 {
             header_up X-Forwarded-For {host}
             header_up X-Real-IP {remote}
+
+            # El health del Backend pingea Postgres y Redis:
+            #   - Postgres caido -> 503 (unhealthy): sin base no puede atender
+            #     nada, asi que sale de rotacion.
+            #   - Redis caido   -> 200 con status "degraded": el Backend sigue
+            #     sirviendo sin cache, asi que `health_status 200` lo deja
+            #     rutear a proposito.
+            # El timeout del health es de 5s porque el ping del Backend puede
+            # tardar hasta 2s por dependencia.
+            health_uri /api/health
+            health_interval 10s
+            health_timeout 5s
+            health_status 200
+            lb_policy round_robin
         }
 
         # Frontend estatico. Ya no es placeholder: el `dist/` del SPA se compila
