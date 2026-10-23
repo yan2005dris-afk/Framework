@@ -7,10 +7,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"multicatalogo-backend/config"
 	"multicatalogo-backend/controllers"
 	"multicatalogo-backend/repository"
+	"multicatalogo-backend/requestlogger"
 	"multicatalogo-backend/routes"
 )
 
@@ -77,10 +77,11 @@ func main() {
 
 	app := fiber.New()
 
-	// Middleware de logger para ver las peticiones en consola
-	app.Use(logger.New(logger.Config{
-		Format: "[${time}] ${status} - ${method} ${path}\n",
-	}))
+	// Log estructurado en JSON (#21): una linea por request. Los campos
+	// comunes con el SaaS (ts en UTC con sufijo Z, level, service) son los que
+	// permiten agregar los logs de los dos servicios en una sola linea de
+	// tiempo.
+	app.Use(requestlogger.New(os.Stdout))
 
 	// CORS con credenciales habilitadas (necesario para que la cookie httpOnly
 	// viaje en el cross-puerto dev 5173 → 3000). En producción no se acepta
