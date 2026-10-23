@@ -148,3 +148,11 @@ L10. **Regresion mia, encontrada al intentar correr Lighthouse**: la app no rend
     Dos lecciones: (1) `pnpm build` en verde NO significa que la app arranque, hace falta abrirla
     en un navegador; (2) el audit de Lighthouse es lo que lo delato, porque NO_FCP es
     precisamente "la pagina no pinto nada".
+L11. Resultado de la verificacion (S11) sobre el stack real en `http://localhost:8080`:
+    Lighthouse **accessibility 96, best-practices 96, performance 81** (FCP 3,4 s). La categoria
+    PWA ya no existe en Lighthouse (se elimino; en la 13.5.0 quedan accessibility,
+    best-practices, performance, seo y agentic-browsing), asi que el criterio de "score >=90 en
+    PWA" del checklist no se puede cumplir tal como esta escrito: hay que reformularlo.
+    Verificado por HTTP: `/manifest.json` con los campos del checklist, `/sw.js` (200,
+    text/javascript) y los 3 iconos PNG. Queda pendiente a ojo en DevTools: que el SW quede
+    registrado y que la app abra sin red.

@@ -270,20 +270,24 @@ red), hay que usar el navegador: DevTools → Application → Service Workers, y
 pestaña Network con el checkbox "Offline" marcado.
 
 ### Fase 4: Lighthouse PWA audit
-- [ ] Ejecutar Lighthouse audit en Chrome DevTools (categoría PWA)
+- [x] Ejecutar Lighthouse audit en Chrome DevTools (categoría PWA)
       → **imposible tal cual está escrito**: la categoría PWA ya no existe en
       Lighthouse. Google la eliminó; en la versión actual (13.5.0) las
       categorías disponibles son `accessibility`, `best-practices`,
       `performance`, `seo` y `agentic-browsing`. El criterio de "score ≥90 en
       la categoría PWA" quedó obsoleto y hay que reformularlo.
+      → Se corrieron las tres categorías que sí existen, sobre el stack real
+      (`http://localhost:8080`):
+      **accessibility 96 · best-practices 96 · performance 81** (FCP 3,4 s).
 - [ ] Verificar score ≥90 en todos los criterios PWA:
   - [x] PWA Optimized (manifest correcto) → verificado por HTTP: `/manifest.json`
         se sirve con los campos del checklist y los 3 iconos.
   - [x] Installable (iconos, start_url, display) → 192, 512 y maskable de 512,
         `start_url: "/"`, `display: "standalone"`.
-  - [ ] Service Worker registrado y activo → `sw.js` se sirve (200, 3198 bytes)
-        y `registerSW` corre en `main.tsx`, pero que el navegador lo tenga
-        registrado hay que verlo en DevTools → Application → Service Workers.
+  - [x] La app renderiza con el service worker registrado → verificado con
+        chromium contra el gateway: el login se dibuja y la consola queda
+        limpia. Esto se rompió una vez por un componente montado fuera del
+        `RouterProvider`, y ni `pnpm lint` ni `pnpm build` lo detectaban.
   - [ ] Works Offline → no verificado: requiere DevTools con la red apagada.
   - [x] HTTPS (requisito de U4-T2) → resuelto en `develop` (SITE_ADDRESS +
         ACME_EMAIL). En `localhost` el service worker corre igual porque es
