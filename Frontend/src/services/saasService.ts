@@ -2,22 +2,21 @@ import { apiFetch } from "./http";
 
 export interface PlanSaaS {
   id: number;
+  slug: string;
   name: string;
-  code: string;
-  price_monthly: number;
-  price_yearly: number;
-  max_users: number;
-  max_products: number;
-  features: string[];
+  description?: string;
+  price_monthly: number | string;
+  price_yearly?: number | string | null;
+  features?: string[] | null;
 }
 
 export interface SubscriptionSaaS {
   id: number;
   tenant_id: number;
   plan_id: number;
-  status: "active" | "canceled" | "past_due" | "trialing";
-  current_period_start: string;
-  current_period_end: string;
+  status: "active" | "canceled" | "past_due" | "trialing" | string;
+  current_period_start?: string;
+  current_period_end?: string;
   cancel_at_period_end: boolean;
 }
 
@@ -60,7 +59,7 @@ export const saasApi = {
    */
   async createSubscription(
     tenantId: number,
-    data: { plan_id: number; billing_cycle?: "monthly" | "yearly" }
+    data: { plan_id: number }
   ): Promise<SubscriptionSaaS> {
     return apiFetch<SubscriptionSaaS>(`/saas/tenants/${tenantId}/subscription`, {
       method: "POST",

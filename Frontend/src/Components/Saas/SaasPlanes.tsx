@@ -35,7 +35,6 @@ export const SaasPlanes = () => {
       setActionLoading(planId);
       const nuevaSub = await saasApi.createSubscription(tenantId, {
         plan_id: planId,
-        billing_cycle: "monthly",
       });
       setSubscription(nuevaSub);
       toast.success("¡Suscripción actualizada con éxito!");
@@ -57,6 +56,12 @@ export const SaasPlanes = () => {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const formatPrice = (val: number | string | undefined | null) => {
+    if (val === undefined || val === null) return "0.00";
+    const num = typeof val === "string" ? parseFloat(val) : val;
+    return isNaN(num) ? "0.00" : num.toFixed(2);
   };
 
   if (loading) {
@@ -87,6 +92,8 @@ export const SaasPlanes = () => {
         {plans.map((plan) => {
           const isCurrent = subscription?.plan_id === plan.id;
           const isPending = actionLoading === plan.id;
+          const priceMonthly = formatPrice(plan.price_monthly);
+          const priceYearly = formatPrice(plan.price_yearly);
 
           return (
             <Card
@@ -103,26 +110,20 @@ export const SaasPlanes = () => {
 
               <CardHeader>
                 <CardTitle className="text-xl">{plan.name}</CardTitle>
-                <CardDescription>Código: {plan.code}</CardDescription>
+                <CardDescription>{plan.description || `Slug: ${plan.slug}`}</CardDescription>
                 <div className="mt-4 flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold tracking-tight">${plan.price_monthly}</span>
+                  <span className="text-4xl font-extrabold tracking-tight">${priceMonthly}</span>
                   <span className="text-sm font-semibold text-muted-foreground">/mes</span>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  o ${plan.price_yearly} al año (ahorro anual)
-                </div>
+                {plan.price_yearly !== null && (
+                  <div className="text-xs text-muted-foreground">
+                    o ${priceYearly} al año
+                  </div>
+                )}
               </CardHeader>
 
               <CardContent className="flex-1 space-y-4">
                 <div className="border-t pt-4 space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                    <span>Hasta <strong>{plan.max_users}</strong> usuarios</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                    <span>Hasta <strong>{plan.max_products}</strong> productos</span>
-                  </div>
                   {plan.features?.map((f, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />

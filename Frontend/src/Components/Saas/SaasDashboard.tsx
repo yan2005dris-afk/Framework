@@ -40,6 +40,12 @@ export const SaasDashboard = () => {
 
   const activePlan = plans.find((p) => p.id === subscription?.plan_id);
 
+  const formatPrice = (val: number | string | undefined | null) => {
+    if (val === undefined || val === null) return "0.00";
+    const num = typeof val === "string" ? parseFloat(val) : val;
+    return isNaN(num) ? "0.00" : num.toFixed(2);
+  };
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground text-sm">
@@ -116,13 +122,15 @@ export const SaasDashboard = () => {
           <CardContent className="flex-1 space-y-4">
             {subscription ? (
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between py-1 border-b">
-                  <span className="text-muted-foreground">Periodo actual:</span>
-                  <span className="font-medium">
-                    {new Date(subscription.current_period_start).toLocaleDateString()} -{" "}
-                    {new Date(subscription.current_period_end).toLocaleDateString()}
-                  </span>
-                </div>
+                {subscription.current_period_start && subscription.current_period_end && (
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Periodo actual:</span>
+                    <span className="font-medium">
+                      {new Date(subscription.current_period_start).toLocaleDateString()} -{" "}
+                      {new Date(subscription.current_period_end).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between py-1 border-b">
                   <span className="text-muted-foreground">Renovación automática:</span>
                   <span className="font-medium">
@@ -156,7 +164,7 @@ export const SaasDashboard = () => {
             <CardDescription>Escala la capacidad de tu negocio</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {plans.slice(0, 2).map((plan) => (
+            {plans.slice(0, 3).map((plan) => (
               <div
                 key={plan.id}
                 className="flex items-center justify-between p-3 rounded-lg border bg-card/50 hover:bg-accent/40 transition"
@@ -164,7 +172,7 @@ export const SaasDashboard = () => {
                 <div>
                   <div className="font-semibold text-sm">{plan.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    Hasta {plan.max_users} usuarios • ${plan.price_monthly}/mes
+                    ${formatPrice(plan.price_monthly)}/mes
                   </div>
                 </div>
                 <Badge variant={activePlan?.id === plan.id ? "default" : "secondary"}>
