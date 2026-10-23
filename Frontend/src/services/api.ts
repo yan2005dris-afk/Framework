@@ -78,6 +78,27 @@ export interface ProductoAdminDTO {
   stock: number;
 }
 
+export interface ReporteResumenDTO {
+  totalVendido: number;
+  numeroPedidos: number;
+  ticketPromedio: number;
+  comisionesDevengadas: number;
+}
+
+export interface TopProductoDTO {
+  productoId: number;
+  nombre: string;
+  totalVentas: number;
+  cantidad: number;
+}
+
+export interface TopReferidoDTO {
+  referidoId: number;
+  nombre: string;
+  nivel: number;
+  ventas: number;
+}
+
 export interface GuardarProductoPayload {
   nombre: string;
   descripcion: string;
@@ -293,6 +314,34 @@ export const api = {
    */
   getLiquidacionesAdmin(): Promise<{ liquidaciones: LiquidacionDTO[] }> {
     return apiFetch<{ liquidaciones: LiquidacionDTO[] }>("/liquidaciones", { method: "GET" });
+  },
+
+  /**
+   * GET /api/reportes/resumen
+   * KPIs generales de ventas y comisiones del negocio (admin).
+   */
+  getReporteResumen(desde?: string, hasta?: string): Promise<ReporteResumenDTO> {
+    const params = new URLSearchParams();
+    if (desde) params.append("desde", desde);
+    if (hasta) params.append("hasta", hasta);
+    const queryString = params.toString() ? `?${params.toString()}` : "";
+    return apiFetch<ReporteResumenDTO>(`/reportes/resumen${queryString}`, { method: "GET" });
+  },
+
+  /**
+   * GET /api/reportes/top-productos
+   * Ranking de productos con mayores ventas (admin).
+   */
+  getTopProductos(limit = 5): Promise<{ data: TopProductoDTO[] }> {
+    return apiFetch<{ data: TopProductoDTO[] }>(`/reportes/top-productos?limit=${limit}`, { method: "GET" });
+  },
+
+  /**
+   * GET /api/reportes/top-referidos
+   * Distribuidores con más ventas consolidadas en su red (admin).
+   */
+  getTopReferidos(limit = 10): Promise<{ data: TopReferidoDTO[] }> {
+    return apiFetch<{ data: TopReferidoDTO[] }>(`/reportes/top-referidos?limit=${limit}`, { method: "GET" });
   },
 
   /**
