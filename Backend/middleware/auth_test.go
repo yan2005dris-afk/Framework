@@ -47,6 +47,10 @@ func (s *stubDBRepo) ListarPedidosMios(int, int, int) ([]models.Pedido, error) {
 func (s *stubDBRepo) ListarPedidosAdmin(string, int, int) ([]models.Pedido, error) { return nil, nil }
 func (s *stubDBRepo) ObtenerPedidoDetalle(int) (*models.PedidoConDetalle, error) { return nil, nil }
 func (s *stubDBRepo) ActualizarEstadoPedido(int, string) error { return nil }
+func (s *stubDBRepo) ObtenerReporteResumen(string, string) (*models.ReporteResumen, error) { return nil, nil }
+func (s *stubDBRepo) ObtenerTopProductos(int) ([]models.TopProducto, error) { return nil, nil }
+func (s *stubDBRepo) ObtenerTopReferidos(int) ([]models.TopReferido, error) { return nil, nil }
+func (s *stubDBRepo) ObtenerComisionesPendientes() ([]models.DeudaDistribuidor, error) { return nil, nil }
 func (s *stubDBRepo) RegistrarComisionesPedido(int, int, float64) ([]models.Comision, error) { return nil, nil }
 func (s *stubDBRepo) ObtenerComisionesPorReferido(int) (*models.ResumenComisiones, error) { return nil, nil }
 func (s *stubDBRepo) LiquidarComisiones(int) (*models.Liquidacion, error) { return nil, nil }
