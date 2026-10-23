@@ -110,7 +110,7 @@ const SidebarContent = ({
           </div>
           {!isCollapsed && (
             <span className="truncate text-lg font-bold tracking-tight">
-              MultiCatálogo
+              YMRT
             </span>
           ) && (
               <span className="flex-col"> Yandris Riviera</span>

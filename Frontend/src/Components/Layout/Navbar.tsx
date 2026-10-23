@@ -31,7 +31,7 @@ const Navbar = ({
   const { user } = useAuth();
 
   const titulo =
-    user?.rol === "admin" ? "Panel de Administración" : "Tienda MultiCatálogo";
+    user?.rol === "admin" ? "Panel de Administración" : "Tienda YMRT";
 
   return (
     <header className="z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 sm:px-6 md:px-8">
