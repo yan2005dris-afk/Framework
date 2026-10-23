@@ -25,7 +25,12 @@ from app.api.billing import router as billing_router
 from app.api.health import router as health_router
 from app.api.users import router as users_router
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.middleware.tenant import set_tenant_context
+
+# Se llama a nivel de modulo: uvicorn ya configuro sus loggers cuando importa
+# la app, asi que esta es la ultima palabra sobre el formato de salida.
+configure_logging()
 
 
 @asynccontextmanager
