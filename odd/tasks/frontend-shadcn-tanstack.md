@@ -37,7 +37,10 @@ S5. Zero remaining imports of react-router-dom in `Frontend/src`; the dependency
 - T5 (S1-S5) Verify: `tsc -b`, `eslint .`, `vite build`, and a smoke run of the dev
   server on the affected routes. Route: inline. Commit: none. DONE
 - T6 (S2) Port the shadcn-admin shell (collapsible sidebar, header, command palette)
-  adapted to the current layout. Route: pending user decision on scope.
+  adapted to the current layout. Route: delegated writer. Commit: shell work unit.
+  Parcial: sidebar colapsable con tooltips, drawer movil con `Sheet` y menu de
+  usuario con `DropdownMenu`/`Avatar`. El command palette queda fuera: implicaria
+  agregar `cmdk` como dependencia nueva.
 
 ## Delivery strategy
 
@@ -71,3 +74,13 @@ L7. Behavior difference to be aware of: an unknown path used to redirect to `/`;
 L8. Native review assess: medium risk, no review due (`nativeRisk: unassessable`, native
     assess blocked by the untracked `.perch/` and `docs/entregables/Fase 4.ipynb`), plan =
     writer self-verification only.
+L9. El shell (T6) se implemento y verifico en navegador real: login headless contra el
+    servicio dev, cookie persistida y render de `/tienda` con el sidebar, el header, el
+    menu de usuario y el contenido. En el DOM: `aria-controls="app-sidebar"`,
+    `aria-expanded="false"`, `aria-current="page"`, `id="app-sidebar"` con `w-64` y
+    `transition-[width]`, y ningun `role="dialog"` (el drawer no se monta cerrado).
+    No verificado en el mismo chequeo: la animacion del drawer, la posicion de los
+    tooltips y el breakpoint exacto 44px->36px del header, que requieren interaccion.
+L10. Cambios visuales que el usuario debe saber: el scrim del drawer paso de
+    `bg-black/50` al default de shadcn (`bg-black/10` + `blur-xs`), y los botones del
+    header grew from 36px to 44px on mobile / 36px desde `sm`.
