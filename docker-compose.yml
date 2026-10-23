@@ -219,6 +219,22 @@ services:
     # forward_auth y devolveria 401, dejando el contenedor unhealthy siempre.
 
   # ============================================================================
+  # CLOUDFLARE TUNNEL
+  # ============================================================================
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: multicatalogo-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+
+  # ============================================================================
   # FRONTEND (solo desarrollo)
   # ============================================================================
 
