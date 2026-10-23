@@ -103,6 +103,7 @@ services:
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
     ports:
       - "${BACKEND_PORT:-3000}:3000"
@@ -133,6 +134,7 @@ services:
       SAAS_DB_ADMIN_USER: ${SAAS_DB_ADMIN_USER:-postgres}
       SAAS_DB_ADMIN_PASSWORD: ${SAAS_DB_ADMIN_PASSWORD:-${POSTGRES_PASSWORD}}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
     command:
       - sh
