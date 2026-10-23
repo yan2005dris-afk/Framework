@@ -19,6 +19,7 @@ func SetupRoutes(
 	healthCtrl *controllers.HealthController,
 	liqCtrl *controllers.LiquidacionController,
 	pedCtrl *controllers.PedidoController,
+	repCtrl *controllers.ReporteController,
 	dbRepo repository.DatabaseRepository,
 	jwtSecret string,
 ) {
@@ -72,6 +73,12 @@ func SetupRoutes(
 	api.Get("/liquidaciones/mias", requireAuth, liqCtrl.ListarLiquidacionesMias)
 	api.Get("/liquidaciones", requireAuth, liqCtrl.ListarLiquidaciones)
 	api.Post("/liquidaciones", requireAuth, liqCtrl.Liquidar)
+
+	// Reportes y Dashboard de Negocio (Fase 6, admin)
+	api.Get("/reportes/resumen", requireAuth, repCtrl.Resumen)
+	api.Get("/reportes/top-productos", requireAuth, repCtrl.TopProductos)
+	api.Get("/reportes/top-referidos", requireAuth, repCtrl.TopReferidos)
+	api.Get("/reportes/comisiones-pendientes", requireAuth, repCtrl.ComisionesPendientes)
 }
 
 // SetupDefaultRoutes permite inicializar rutas instanciando los repositorios y controllers
@@ -89,6 +96,7 @@ func SetupDefaultRoutes(app *fiber.App) {
 	healthCtrl := controllers.NewHealthController(nil, nil)
 	liqCtrl := controllers.NewLiquidacionController(dbRepo, "dev")
 	pedCtrl := controllers.NewPedidoController(dbRepo, "dev")
+	repCtrl := controllers.NewReporteController(dbRepo, "dev")
 
-	SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl, healthCtrl, liqCtrl, pedCtrl, dbRepo, "dev-secret")
+	SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl, healthCtrl, liqCtrl, pedCtrl, repCtrl, dbRepo, "dev-secret")
 }
