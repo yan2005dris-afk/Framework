@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
-  // Hidratación: confirmar la sesión contra el backend.
+  // Hidratación: confirmar la sesión contra el backend cuando haya conexión.
   useEffect(() => {
     let active = true;
     (async () => {
@@ -64,7 +64,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ email: me.email, rol: me.rol }));
         }
       } catch {
-        // /api/me devolvió 401 - AuthContext ya está limpio. onUnauthorized se llamó.
+        // Si falló por red o servidor caído (ej: offline/503), NO limpiamos la sesión
+        // preservada en localStorage para permitir acceso offline al catálogo y tienda.
+        // Si fue 401 explícito, handleUnauthorized ya limpió el estado y el storage.
       } finally {
         if (active) setLoading(false);
       }
