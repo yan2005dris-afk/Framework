@@ -130,6 +130,8 @@ services:
       SAAS_DB_USER: ${SAAS_DB_USER:-saas_app}
       SAAS_DB_PASSWORD: ${SAAS_DB_PASSWORD}
       SAAS_DB_APP_ROLE: ${SAAS_DB_APP_ROLE:-saas_app}
+      SAAS_DB_ADMIN_USER: ${SAAS_DB_ADMIN_USER:-postgres}
+      SAAS_DB_ADMIN_PASSWORD: ${SAAS_DB_ADMIN_PASSWORD:-${POSTGRES_PASSWORD}}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
     command:
