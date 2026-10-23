@@ -109,12 +109,17 @@ func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 	// Importante: el email que se usa para invalidar la caché es el del
 	// token, NO el del body. Así la atribución de comisiones siempre va
 	// al usuario autenticado, incluso si el body miente.
-	go func(total float64, uID int, email string) {
+	go func(pedID int, total float64, uID int, email string) {
 		log.Printf("🧵 [Goroutine] Iniciando cálculo asíncrono de comisiones para usuario %d, total $%.2f", uID, total)
 		if err := c.dbRepo.ActualizarComisiones(uID, total); err != nil {
 			log.Printf("⚠️ [Goroutine] Error al actualizar comisiones: %v", err)
 		} else {
 			log.Printf("✅ [Goroutine] Comisiones actualizadas con éxito en PostgreSQL")
+		}
+		if _, err := c.dbRepo.RegistrarComisionesPedido(pedID, uID, total); err != nil {
+			log.Printf("⚠️ [Goroutine] Error al registrar ledger de comisiones: %v", err)
+		} else {
+			log.Printf("✅ [Goroutine] Ledger de comisiones registrado con éxito")
 		}
 
 		// Paso 5: Invalidación de Caché en Redis.
@@ -128,7 +133,7 @@ func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 			}
 			log.Printf("🧹 [Goroutine] Caché de productos y red invalidada en Redis")
 		}
-	}(pedido.Total, usuarioIDVal, tokenEmail)
+	}(pedido.ID, pedido.Total, usuarioIDVal, tokenEmail)
 
 	numeroPedido := fmt.Sprintf("MC-%06d", pedido.ID)
 
