@@ -29,9 +29,38 @@
 #   `/api/saas/plans` NO es excepcion: el catalogo no es tenant-scoped, pero
 #   si exige identidad (S10 + tests de billing esperan 401 sin token).
 #
-# IMPORTANTE: sin TLS por ahora (dev en HTTP). U4 agrega auto_https.
+# TLS (#20). La direccion del sitio sale del entorno, no del archivo, para no
+# tener dos Caddyfiles que se separan con el tiempo:
+#
+#   - Sin SITE_ADDRESS (desarrollo, el default): `http://localhost:8080`, HTTP
+#     plano. Es exactamente el comportamiento previo a U4.
+#   - Con SITE_ADDRESS=api.tudominio.com y ACME_EMAIL=vos@tudominio.com:
+#     Caddy pide el certificado a Let's Encrypt por HTTP-01 (puerto 80) y lo
+#     renueva solo. Pasar a produccion es cambiar dos variables del `.env`,
+#     no editar este archivo.
+#
+# OJO: la variable no puede quedar DEFINIDA VACIA. Si SITE_ADDRESS existe pero
+# esta vacio, el placeholder no resuelve, el bloque se interpreta como site
+# global y Caddy ni arranca ("unrecognized global option"). Para no publicar
+# TLS, la linea se comenta en el `.env`; nunca se deja en blanco.
+{$SITE_ADDRESS:http://localhost:8080} {
 
-:8080 {
+    # TLS (#20). Hay un solo interruptor, ACME_EMAIL, y tres modos:
+    #
+    #   - Sin SITE_ADDRESS (desarrollo): `http://localhost:8080`. auto_https se
+    #     apaga solo por la direccion http, asi que esta linea no hace nada.
+    #   - Con SITE_ADDRESS=https://localhost:8443 y sin ACME_EMAIL: el default
+    #     `internal` emite un certificado de la CA interna de Caddy. Es el TLS
+    #     local de S7: no depende de un dominio publico, y el browser avisa que
+    #     no confia en la CA (se acepta una vez por maquina).
+    #   - Con SITE_ADDRESS=api.tudominio.com y ACME_EMAIL=vos@tudominio.com:
+    #     Let's Encrypt por HTTP-01, con renovacion automatica.
+    #
+    # AVISO: `internal` es el default y por eso mismo es un modo de
+    # DESARROLLO. Un deploy real con el dominio puesto y ACME_EMAIL olvidado
+    # emite un certificado que ningun browser confia: no es un error visible,
+    # es un sitio que no abre. Si publicas, ACME_EMAIL va en el `.env`.
+    tls {$ACME_EMAIL:internal}
 
     # Todo va dentro de un unico `route` a proposito. Caddy ordena las
     # directivas por tipo (no por el orden en que se escriben), asi que un
