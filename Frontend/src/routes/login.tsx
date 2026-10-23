@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import Login from "@/Components/Auth/Login/Login";
 
 /**
@@ -8,8 +8,9 @@ import Login from "@/Components/Auth/Login/Login";
 export const Route = createFileRoute("/login")({
   beforeLoad: ({ context }) => {
     if (context.auth.isAuthenticated) {
-      throw { redirectTo: context.auth.user?.rol === "admin" ? "/" : "/tienda" };
+      throw redirect({ to: context.auth.user?.rol === "admin" ? "/" : "/tienda" });
     }
   },
   component: Login,
 });
+
