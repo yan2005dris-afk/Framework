@@ -79,7 +79,10 @@ func (r *PostgresRepository) ObtenerProductos() ([]models.Producto, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria FROM productos ORDER BY id ASC`
+	query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
+	           FROM productos 
+	           WHERE COALESCE(activo, true) = true 
+	           ORDER BY id ASC`
 	rows, err := pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("error al consultar productos: %w", err)
@@ -89,7 +92,7 @@ func (r *PostgresRepository) ObtenerProductos() ([]models.Producto, error) {
 	productos := make([]models.Producto, 0)
 	for rows.Next() {
 		var p models.Producto
-		if err := rows.Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Precio, &p.Categoria, &p.Img, &p.Galeria); err != nil {
+		if err := rows.Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Precio, &p.Categoria, &p.Img, &p.Galeria, &p.Activo, &p.Stock); err != nil {
 			return nil, fmt.Errorf("error al escanear producto: %w", err)
 		}
 		if p.Galeria == nil {
@@ -115,9 +118,10 @@ func (r *PostgresRepository) ObtenerProductoPorID(id int) (*models.Producto, err
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria FROM productos WHERE id = $1`
+	query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
+	           FROM productos WHERE id = $1`
 	var p models.Producto
-	err = pool.QueryRow(ctx, query, id).Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Precio, &p.Categoria, &p.Img, &p.Galeria)
+	err = pool.QueryRow(ctx, query, id).Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Precio, &p.Categoria, &p.Img, &p.Galeria, &p.Activo, &p.Stock)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -732,4 +736,147 @@ func (r *PostgresRepository) ListarLiquidacionesPorReferido(referidoID int) ([]m
 	}
 
 	return liquidaciones, nil
+}
+
+// ObtenerProductosAdmin retorna todos los productos incluidos los inactivos (Backoffice Admin).
+func (r *PostgresRepository) ObtenerProductosAdmin() ([]models.Producto, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
+	           FROM productos ORDER BY id ASC`
+	rows, err := pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar productos admin: %w", err)
+	}
+	defer rows.Close()
+
+	productos := make([]models.Producto, 0)
+	for rows.Next() {
+		var p models.Producto
+		if err := rows.Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Precio, &p.Categoria, &p.Img, &p.Galeria, &p.Activo, &p.Stock); err != nil {
+			return nil, fmt.Errorf("error al escanear producto: %w", err)
+		}
+		if p.Galeria == nil {
+			p.Galeria = []string{}
+		}
+		productos = append(productos, p)
+	}
+	return productos, nil
+}
+
+// CrearProducto inserta un nuevo artículo en la tabla productos.
+func (r *PostgresRepository) CrearProducto(req models.ProductoRequest) (*models.Producto, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	galeria := req.Galeria
+	if galeria == nil {
+		galeria = []string{}
+	}
+	activo := true
+	if req.Activo != nil {
+		activo = *req.Activo
+	}
+	stock := 100
+	if req.Stock != nil {
+		stock = *req.Stock
+	}
+
+	var p models.Producto
+	query := `
+		INSERT INTO productos (nombre, descripcion, precio, categoria, img, galeria, activo, stock)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, nombre, descripcion, precio, categoria, img, galeria, activo, stock
+	`
+	err = pool.QueryRow(ctx, query, req.Nombre, req.Descripcion, req.Precio, req.Categoria, req.Img, galeria, activo, stock).
+		Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Precio, &p.Categoria, &p.Img, &p.Galeria, &p.Activo, &p.Stock)
+	if err != nil {
+		return nil, fmt.Errorf("error al insertar producto: %w", err)
+	}
+	return &p, nil
+}
+
+// ActualizarProducto permite edición parcial o total de los campos del producto.
+func (r *PostgresRepository) ActualizarProducto(id int, req models.ProductoRequest) (*models.Producto, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	p, err := r.ObtenerProductoPorID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if req.Nombre != "" {
+		p.Nombre = req.Nombre
+	}
+	if req.Descripcion != "" {
+		p.Descripcion = req.Descripcion
+	}
+	if req.Precio > 0 {
+		p.Precio = req.Precio
+	}
+	if req.Categoria != "" {
+		p.Categoria = req.Categoria
+	}
+	if req.Img != "" {
+		p.Img = req.Img
+	}
+	if req.Galeria != nil {
+		p.Galeria = req.Galeria
+	}
+	if req.Activo != nil {
+		p.Activo = *req.Activo
+	}
+	if req.Stock != nil {
+		p.Stock = *req.Stock
+	}
+
+	query := `
+		UPDATE productos 
+		SET nombre = $1, descripcion = $2, precio = $3, categoria = $4, img = $5, galeria = $6, activo = $7, stock = $8
+		WHERE id = $9
+		RETURNING id, nombre, descripcion, precio, categoria, img, galeria, activo, stock
+	`
+	err = pool.QueryRow(ctx, query, p.Nombre, p.Descripcion, p.Precio, p.Categoria, p.Img, p.Galeria, p.Activo, p.Stock, id).
+		Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Precio, &p.Categoria, &p.Img, &p.Galeria, &p.Activo, &p.Stock)
+	if err != nil {
+		return nil, fmt.Errorf("error al actualizar producto: %w", err)
+	}
+	return p, nil
+}
+
+// EliminarProductoLogico marca el producto como inactivo (activo = false) sin borrar la fila física.
+func (r *PostgresRepository) EliminarProductoLogico(id int) error {
+	pool, err := r.getPool()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tag, err := pool.Exec(ctx, `UPDATE productos SET activo = false WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("error al desactivar producto: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

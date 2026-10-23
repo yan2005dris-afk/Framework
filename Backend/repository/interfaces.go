@@ -10,7 +10,11 @@ type DatabaseRepository interface {
 	// BuscarUsuarioPorEmail trae al usuario (incluido el hash bcrypt del password) por email.
 	BuscarUsuarioPorEmail(email string) (*models.Usuario, error)
 	ObtenerProductos() ([]models.Producto, error)
+	ObtenerProductosAdmin() ([]models.Producto, error)
 	ObtenerProductoPorID(id int) (*models.Producto, error)
+	CrearProducto(req models.ProductoRequest) (*models.Producto, error)
+	ActualizarProducto(id int, req models.ProductoRequest) (*models.Producto, error)
+	EliminarProductoLogico(id int) error
 	ObtenerRed() (*models.Referido, error)
 	// CrearPedido registra el pedido en una transacción ACID.
 	CrearPedido(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error)

@@ -37,6 +37,10 @@ func (m *MockDatabaseRepository) BuscarUsuarioPorEmail(email string) (*models.Us
 }
 func (m *MockDatabaseRepository) ObtenerProductos() ([]models.Producto, error)        { return nil, nil }
 func (m *MockDatabaseRepository) ObtenerProductoPorID(int) (*models.Producto, error)    { return nil, nil }
+func (m *MockDatabaseRepository) ObtenerProductosAdmin() ([]models.Producto, error) { return nil, nil }
+func (m *MockDatabaseRepository) CrearProducto(req models.ProductoRequest) (*models.Producto, error) { return nil, nil }
+func (m *MockDatabaseRepository) ActualizarProducto(int, models.ProductoRequest) (*models.Producto, error) { return nil, nil }
+func (m *MockDatabaseRepository) EliminarProductoLogico(int) error { return nil }
 func (m *MockDatabaseRepository) ObtenerRed() (*models.Referido, error)                 { return nil, nil }
 func (m *MockDatabaseRepository) CrearPedido(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error) {
 	m.mu.Lock()
