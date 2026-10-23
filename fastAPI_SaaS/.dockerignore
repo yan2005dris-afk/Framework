@@ -1,0 +1,29 @@
+# .dockerignore del SaaS.
+#
+# A diferencia de los servicios Go, este Dockerfile copia rutas sueltas
+# (`COPY app ./app`), asi que el contexto extra no rompe el build. Aun asi se
+# acota: el `.venv` del host pesa cientos de MB y no lo necesita nadie, y el
+# `.env` local tiene las credenciales de la base y el webhook de Stripe.
+#
+# OJO: `README.md` NO se excluye a proposito: el Dockerfile lo copia y uv lo
+# usa como fuente del paquete.
+
+# --- Secretos -----------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Entornos y caches ---------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- Artefactos y tooling ------------------------------------------------------
+*.egg-info/
+.vscode/
+.perch/
+.atl/

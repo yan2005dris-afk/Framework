@@ -1,0 +1,22 @@
+# .dockerignore del servicio auth-service.
+#
+# Mismo motivo que Backend/.dockerignore: el builder hace `COPY . .`, asi que
+# sin este archivo el contexto es el directorio entero y arrastra el `.env`
+# local (JWT secret y credenciales) y el binario compilado.
+
+# --- Secretos -----------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Artefactos de compilacion local ------------------------------------------
+auth-service
+*.exe
+*.exe~
+*.test
+*.out
+tmp/
+
+# --- Tooling ------------------------------------------------------------------
+.venv/
+.vscode/

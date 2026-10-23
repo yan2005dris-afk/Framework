@@ -187,10 +187,36 @@ services:
         condition: service_healthy
       saas-api:
         condition: service_healthy
+    environment:
+      # TLS (#20). Forma de lista SIN valor, a proposito: Compose omite la
+      # variable del contenedor cuando no esta definida, y entonces Caddy usa
+      # el default del Caddyfile (http://localhost:8080).
+      #
+      # No usar `SITE_ADDRESS: ${SITE_ADDRESS:-}`: una variable vacia SI llega
+      # al contenedor, el placeholder del Caddyfile no resuelve y Caddy no
+      # arranca. Verificado con `caddy adapt`.
+      - SITE_ADDRESS
+      - ACME_EMAIL
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
-    # Healthcheck contra /  - Caddy siempre responde; si los backends
-    # no responden, Caddy devuelve 502, que el healthcheck vera.
+      # TLS (#20). Descomentar SOLO en un deploy con dominio real, y con
+      # SITE_ADDRESS y ACME_EMAIL definidos en el `.env`:
+      #   80 es necesario para el challenge HTTP-01 de Let's Encrypt.
+      #   443 es el trafico HTTPS.
+      # Se dejan comentados porque casi todos los hosts ya tienen algo en 80/443
+      # y `docker compose up` falla al hacer bind de un puerto ocupado.
+      # - "${HTTP_PORT:-80}:80"
+      # - "${TLS_PORT:-443}:443"
+    volumes:
+      # Certificados de Caddy (/data) y su configuracion autogenerada (/config).
+      # Sin esto, cada `up --force-recreate` pierde los certificados y Caddy
+      # pide uno nuevo: Let's Encrypt permite 5 Emissions nuevas por semana
+      # por dominio y el deploy se queda sin TLS a los pocos reinicios.
+      - caddy_data:/data
+      - caddy_config:/config
+    # El healthcheck vive en el Dockerfile (HEALTHCHECK contra /health), asi que
+    # no se repite aca. No se puede usar `/` comoprobe: pasa por
+    # forward_auth y devolveria 401, dejando el contenedor unhealthy siempre.
 
   # ============================================================================
   # FRONTEND (solo desarrollo)
@@ -245,3 +271,8 @@ volumes:
     name: multicatalogo_db_data
   # node_modules del servicio frontend de dev (profile `dev`).
   frontend_node_modules:
+  # Certificados y config autogenerada de Caddy. El nombre es explicito para
+  # que `docker compose down -v` (el reset) no borre sin querer los
+  # certificados de un deploy real.
+  caddy_data:
+  caddy_config:
