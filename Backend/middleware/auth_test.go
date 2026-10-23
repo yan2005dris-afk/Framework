@@ -35,8 +35,8 @@ func (s *stubDBRepo) BuscarUsuarioPorEmail(email string) (*models.Usuario, error
 func (s *stubDBRepo) ObtenerProductos() ([]models.Producto, error)              { return nil, nil }
 func (s *stubDBRepo) ObtenerProductoPorID(int) (*models.Producto, error)       { return nil, nil }
 func (s *stubDBRepo) ObtenerRed() (*models.Referido, error)                     { return nil, nil }
-func (s *stubDBRepo) CrearPedido(int, models.CheckoutRequest) (*models.Pedido, error) {
-	return nil, nil
+func (s *stubDBRepo) CrearPedido(int, models.CheckoutRequest, string) (*models.Pedido, bool, error) {
+	return nil, false, nil
 }
 func (s *stubDBRepo) ActualizarComisiones(int, float64) error { return nil }
 
