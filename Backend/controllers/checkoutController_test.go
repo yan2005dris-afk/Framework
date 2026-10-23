@@ -32,6 +32,7 @@ type CrearPedidoCall struct {
 	IdempotencyKey string
 }
 
+func (m *MockDatabaseRepository) RegistrarUsuario(req models.RegisterRequest, pwd string) (*models.Usuario, error) { return nil, nil }
 func (m *MockDatabaseRepository) BuscarUsuarioPorEmail(email string) (*models.Usuario, error) {
 	return nil, nil
 }

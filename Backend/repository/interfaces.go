@@ -9,6 +9,7 @@ import (
 type DatabaseRepository interface {
 	// BuscarUsuarioPorEmail trae al usuario (incluido el hash bcrypt del password) por email.
 	BuscarUsuarioPorEmail(email string) (*models.Usuario, error)
+	RegistrarUsuario(req models.RegisterRequest, hashedPassword string) (*models.Usuario, error)
 	ObtenerProductos() ([]models.Producto, error)
 	ObtenerProductosAdmin() ([]models.Producto, error)
 	ObtenerProductoPorID(id int) (*models.Producto, error)

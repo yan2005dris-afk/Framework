@@ -233,3 +233,11 @@ type DeudaDistribuidor struct {
 	TotalPendiente  float64 `json:"totalPendiente"`
 	NumeroComisiones int    `json:"numeroComisiones"`
 }
+
+// RegisterRequest representa el payload para registro de nuevos clientes con código de patrocinador opcional.
+type RegisterRequest struct {
+	Nombre   string `json:"nombre"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Ref      string `json:"ref,omitempty"`
+}

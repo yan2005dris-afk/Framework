@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"golang.org/x/crypto/bcrypt"
+	"multicatalogo-backend/repository"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -39,19 +41,26 @@ const CookieName = "auth_token"
 type AuthController struct {
 	authServiceURL string
 	httpClient     *http.Client
+	dbRepo         repository.DatabaseRepository
+	appEnv         string
 }
 
 // NewAuthController instancia el proxy.
 // authServiceURL: URL base del auth-service (e.g. "http://auth-service:3001").
-func NewAuthController(authServiceURL string) *AuthController {
+func NewAuthController(authServiceURL string, dbRepo repository.DatabaseRepository, appEnv string) *AuthController {
 	if authServiceURL == "" {
 		authServiceURL = "http://auth-service:3001"
+	}
+	if appEnv == "" {
+		appEnv = "dev"
 	}
 	return &AuthController{
 		authServiceURL: strings.TrimRight(authServiceURL, "/"),
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		dbRepo: dbRepo,
+		appEnv: appEnv,
 	}
 }
 
@@ -174,3 +183,40 @@ func itoa(i int) string {
 // FormatDuration se usa en algunos puntos de logs. Mantenido porque su signature
 // aparece en tests; lo dejo aunque hoy no se use directamente.
 var _ = fmt.Sprintf
+
+// Register registra un nuevo usuario en auth.users y le asigna su nodo en referidos.
+func (ac *AuthController) Register(c *fiber.Ctx) error {
+	var req models.RegisterRequest
+	if err := c.BodyParser(&req); err != nil {
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "Cuerpo de petición inválido"}.Write(c)
+	}
+
+	if req.Nombre == "" || req.Email == "" || req.Password == "" {
+		return models.APIError{
+			Status:  fiber.StatusBadRequest,
+			Error:   "Validación fallida",
+			Detalle: "Los campos nombre, email y password son obligatorios",
+		}.Write(c)
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: "Error al procesar contraseña"}.Write(c)
+	}
+
+	usuario, err := ac.dbRepo.RegistrarUsuario(req, string(hashedPassword))
+	if err != nil {
+		if strings.Contains(err.Error(), "email ya registrado") {
+			return models.APIError{Status: fiber.StatusConflict, Error: "El correo electrónico ya se encuentra registrado"}.Write(c)
+		}
+		if strings.Contains(err.Error(), "código de referido inválido") {
+			return models.APIError{Status: fiber.StatusBadRequest, Error: "El código de referido especificado no existe"}.Write(c)
+		}
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: err.Error()}.Write(c)
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"mensaje": "Usuario registrado exitosamente",
+		"usuario": usuario,
+	})
+}
