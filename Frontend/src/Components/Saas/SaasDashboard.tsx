@@ -130,7 +130,7 @@ export const SaasDashboard = () => {
                   </span>
                 </div>
                 <div className="pt-2">
-                  <Link to="/saas/planes">
+                  <Link to="/planes">
                     <Button variant="outline" size="sm" className="w-full">
                       Cambiar Plan o Gestionar
                     </Button>
@@ -141,7 +141,7 @@ export const SaasDashboard = () => {
               <div className="text-center py-6 space-y-3">
                 <AlertCircle className="h-8 w-8 text-amber-500 mx-auto" />
                 <p className="text-sm text-muted-foreground">Este tenant aún no tiene un plan activo.</p>
-                <Link to="/saas/planes">
+                <Link to="/planes">
                   <Button size="sm">Explorar Planes</Button>
                 </Link>
               </div>

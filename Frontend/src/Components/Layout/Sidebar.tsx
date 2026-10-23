@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,49 +18,60 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "../../Context/useAuth";
 import { Icon, type IconName } from "../Share/Icon";
 
-interface NavItem {
+export type NavPath =
+  | "/"
+  | "/tienda"
+  | "/catalogo"
+  | "/mi-red"
+  | "/carrito"
+  | "/saas"
+  | "/planes"
+  | "/usuarios-saas";
+
+interface NavSubItem {
   name: string;
   path: NavPath;
   icon: IconName;
-  soloAdmin?: boolean;
 }
 
-/** Rutas del layout protegido. El union mantiene `to={item.path}` tipado por TanStack Router. */
-type NavPath = "/" | "/tienda" | "/catalogo" | "/mi-red" | "/carrito" | "/saas";
+interface NavGroupItem {
+  name: string;
+  icon: IconName;
+  soloAdmin?: boolean;
+  subItems?: NavSubItem[];
+  path?: NavPath;
+}
 
 interface SidebarProps {
-  /** Riel angosto (solo iconos) vs panel completo. Afecta solo a escritorio. */
   isCollapsed: boolean;
-  /** Estado controlado del drawer móvil. */
   mobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
 
 interface SidebarContentProps {
   isCollapsed: boolean;
-  /** Cierra el drawer móvil al tocar un ítem de navegación. */
   onNavigate?: () => void;
-  /** Solo en el drawer: inyecta el botón de cerrar. */
   onClose?: () => void;
 }
 
-const navItems: NavItem[] = [
+const navMenu: NavGroupItem[] = [
   { name: "Dashboard", path: "/", icon: "layout-dashboard", soloAdmin: true },
-  { name: "Panel SaaS", path: "/saas", icon: "shield", soloAdmin: true },
+  {
+    name: "Panel SaaS",
+    icon: "shield",
+    soloAdmin: true,
+    subItems: [
+      { name: "Métricas & Estado", path: "/saas", icon: "shield" },
+      { name: "Planes & Precios", path: "/planes", icon: "credit-card" },
+      { name: "Usuarios del Tenant", path: "/usuarios-saas", icon: "users" },
+    ],
+  },
   { name: "Tienda", path: "/tienda", icon: "shopping-bag" },
   { name: "Catálogo", path: "/catalogo", icon: "store" },
-  { name: "Mi Red", path: "/mi-red", icon: "users", soloAdmin: true },
+  { name: "Mi Red MLM", path: "/mi-red", icon: "users", soloAdmin: true },
   { name: "Carrito", path: "/carrito", icon: "shopping-cart" },
 ];
 
-/**
- * Cuerpo del sidebar, compartido entre el panel de escritorio y el drawer móvil.
- *
- * Sigue el patrón de `app-sidebar.tsx` + `nav-group.tsx` de shadcn-admin:
- * header de marca, navegación y footer de rol. Este repo no tiene instalado el
- * primitive `sidebar`, así que el `aside` se arma a mano conservando el lenguaje
- * de color actual: fondo slate, acentos indigo.
- */
 const SidebarContent = ({
   isCollapsed,
   onNavigate,
@@ -67,8 +79,11 @@ const SidebarContent = ({
 }: SidebarContentProps) => {
   const { user } = useAuth();
   const { pathname } = useLocation();
+  const [saasOpen, setSaasOpen] = useState(
+    pathname === "/saas" || pathname === "/planes" || pathname === "/usuarios-saas"
+  );
 
-  const itemsPermitidos = navItems.filter(
+  const itemsPermitidos = navMenu.filter(
     (item) => !item.soloAdmin || user?.rol === "admin"
   );
 
@@ -109,23 +124,106 @@ const SidebarContent = ({
       {/* Navegación */}
       <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3">
         {itemsPermitidos.map((item) => {
+          // Caso con submenú (ej: Panel SaaS)
+          if (item.subItems) {
+            const isAnySubActive = item.subItems.some((sub) => pathname === sub.path);
+
+            if (isCollapsed) {
+              return (
+                <Tooltip key={item.name}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={item.subItems[0].path}
+                      onClick={onNavigate}
+                      className={cn(
+                        "flex min-h-11 items-center justify-center rounded-lg p-3 transition-colors",
+                        isAnySubActive
+                          ? "bg-indigo-600/30 text-indigo-300 font-medium"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      )}
+                      aria-label={item.name}
+                    >
+                      <Icon name={item.icon} size={22} />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p className="font-semibold">{item.name}</p>
+                    <div className="mt-1 flex flex-col gap-1 text-xs">
+                      {item.subItems.map((sub) => (
+                        <span key={sub.path}>{sub.name}</span>
+                      ))}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            }
+
+            return (
+              <div key={item.name} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setSaasOpen(!saasOpen)}
+                  className={cn(
+                    "flex w-full min-h-11 items-center justify-between gap-3 rounded-lg p-3 transition-colors text-sm",
+                    isAnySubActive
+                      ? "text-indigo-300 font-semibold bg-slate-800/60"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon name={item.icon} size={20} />
+                    <span>{item.name}</span>
+                  </div>
+                  <Icon
+                    name={saasOpen ? "chevron-down" : "chevron-right"}
+                    size={16}
+                    className="text-slate-400"
+                  />
+                </button>
+
+                {saasOpen && (
+                  <div className="ml-5 pl-3 border-l border-slate-700/60 space-y-1">
+                    {item.subItems.map((sub) => {
+                      const isSubActive = pathname === sub.path;
+                      return (
+                        <Link
+                          key={sub.path}
+                          to={sub.path}
+                          onClick={onNavigate}
+                          className={cn(
+                            "flex min-h-9 items-center gap-2.5 rounded-md px-3 py-1.5 text-xs transition-colors",
+                            isSubActive
+                              ? "bg-indigo-600 font-medium text-white shadow-sm"
+                              : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                          )}
+                        >
+                          <Icon name={sub.icon} size={16} />
+                          <span>{sub.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // Ítems estándar de enlace directo
+          const itemPath = item.path || "/";
           const isActive =
-            item.path === "/"
+            itemPath === "/"
               ? pathname === "/"
-              : pathname.startsWith(item.path);
+              : pathname.startsWith(itemPath);
 
           const link = (
             <Link
-              key={item.path}
-              to={item.path}
+              key={itemPath}
+              to={itemPath}
               onClick={onNavigate}
               aria-current={isActive ? "page" : undefined}
-              // Sin texto visible en el riel: el nombre accesible no puede
-              // depender solo del tooltip, que solo se anuncia al abrirlo.
               aria-label={isCollapsed ? item.name : undefined}
               className={cn(
-                // min-h-11: la auditoría mobile exige 44px de alto en targets.
-                "flex min-h-11 items-center gap-3 rounded-lg p-3 transition-colors",
+                "flex min-h-11 items-center gap-3 rounded-lg p-3 transition-colors text-sm",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400",
                 isActive
                   ? "bg-indigo-600 font-medium text-white shadow-sm"
@@ -140,92 +238,86 @@ const SidebarContent = ({
             </Link>
           );
 
-          // En el riel angosto el nombre no cabe: tooltip real en vez de `title`.
-          if (!isCollapsed) return link;
+          if (isCollapsed) {
+            return (
+              <Tooltip key={itemPath}>
+                <TooltipTrigger asChild>{link}</TooltipTrigger>
+                <TooltipContent side="right">{item.name}</TooltipContent>
+              </Tooltip>
+            );
+          }
 
-          return (
-            <Tooltip key={item.path}>
-              <TooltipTrigger asChild>{link}</TooltipTrigger>
-              <TooltipContent side="right" sideOffset={8}>
-                {item.name}
-              </TooltipContent>
-            </Tooltip>
-          );
+          return link;
         })}
       </nav>
 
-      {/* Rol */}
-      <div className="shrink-0 border-t border-slate-800 p-3 text-center text-xs text-slate-400">
-        {isCollapsed ? (
-          <span className="font-semibold uppercase text-indigo-400">
-            {user?.rol}
-          </span>
-        ) : (
-          <p>
-            Conectado como:{" "}
-            <span className="font-semibold uppercase text-indigo-400">
-              {user?.rol}
-            </span>
-          </p>
-        )}
+      {/* Footer de rol */}
+      <div className="shrink-0 border-t border-slate-800 p-3">
+        <div
+          className={cn(
+            "flex items-center gap-3 rounded-lg bg-slate-800/60 p-3 text-xs",
+            isCollapsed && "justify-center px-0"
+          )}
+        >
+          <div className="flex size-2 shrink-0 rounded-full bg-emerald-400" />
+          {!isCollapsed && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-slate-200">
+                {user?.email ?? "Usuario"}
+              </p>
+              <p className="truncate uppercase text-slate-400">
+                Rol: {user?.rol ?? "cliente"}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-/**
- * Sidebar responsive.
- *
- * Escritorio: `aside` en el flujo, conmutable entre panel completo (16rem) y riel
- * de iconos (5rem) desde el toggle del header. Móvil: `ui/sheet` como drawer
- * off-canvas real, en lugar del overlay a mano y el `-translate-x-full`; así el
- * foco queda atrapado en el drawer y se cierra con Escape, con el overlay o con
- * el botón de cerrar.
- */
-const Sidebar = ({
+export const Sidebar = ({
   isCollapsed,
   mobileOpen = false,
   onCloseMobile,
-}: SidebarProps) => (
-  <>
-    <aside
-      id="app-sidebar"
-      aria-label="Navegación principal"
-      className={cn(
-        "hidden shrink-0 flex-col bg-slate-900 text-white transition-[width] duration-300 ease-in-out md:flex",
-        isCollapsed ? "w-20" : "w-64"
-      )}
-    >
-      <SidebarContent isCollapsed={isCollapsed} />
-    </aside>
-
-    <Sheet
-      open={mobileOpen}
-      onOpenChange={(open) => {
-        if (!open) onCloseMobile?.();
-      }}
-    >
-      {/* Se usa el botón de cierre propio de SidebarContent: el de la primitive
-          vendida trae un `sr-only` en inglés y queda en 28px de alto. */}
-      <SheetContent
-        side="left"
-        showCloseButton={false}
-        className="w-64 gap-0 border-0 bg-slate-900 p-0 text-white data-[side=left]:w-64! data-[side=left]:max-w-64!"
+}: SidebarProps) => {
+  return (
+    <>
+      {/* Panel de escritorio */}
+      <aside
+        id="app-sidebar"
+        aria-label="Navegación principal"
+        className={cn(
+          "hidden shrink-0 transition-all duration-300 ease-in-out md:block",
+          isCollapsed ? "w-16" : "w-64"
+        )}
       >
-        <SheetHeader className="sr-only">
-          <SheetTitle>Menú de navegación</SheetTitle>
-          <SheetDescription>
-            Secciones disponibles en MultiCatálogo
-          </SheetDescription>
-        </SheetHeader>
-        <SidebarContent
-          isCollapsed={false}
-          onNavigate={onCloseMobile}
-          onClose={onCloseMobile}
-        />
-      </SheetContent>
-    </Sheet>
-  </>
-);
+        <SidebarContent isCollapsed={isCollapsed} />
+      </aside>
+
+      {/* Drawer móvil con ui/sheet */}
+      <Sheet open={mobileOpen} onOpenChange={(open) => !open && onCloseMobile?.()}>
+        <SheetContent
+          side="left"
+          className="w-72 p-0 border-r border-slate-800 bg-slate-900"
+          aria-describedby="mobile-nav-description"
+        >
+          <SheetHeader className="sr-only">
+            <SheetTitle>Navegación principal</SheetTitle>
+            <SheetDescription id="mobile-nav-description">
+              Menú de navegación para acceder a las secciones del catálogo,
+              tienda, carrito y administración.
+            </SheetDescription>
+          </SheetHeader>
+          <SidebarContent
+            isCollapsed={false}
+            onNavigate={onCloseMobile}
+            onClose={onCloseMobile}
+          />
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+};
 
 export default Sidebar;
