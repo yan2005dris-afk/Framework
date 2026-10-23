@@ -53,7 +53,7 @@ const Register = () => {
         <div className="text-center mb-6">
           <h2 className="text-3xl font-bold text-slate-900">Crear Cuenta</h2>
           <p className="text-slate-500 mt-2 text-sm">
-            Únete a MultiCatálogo y forma parte de nuestra red de belleza
+            Únete a YMRT y forma parte de nuestra red de belleza
           </p>
         </div>
 
