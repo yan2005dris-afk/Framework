@@ -8,6 +8,11 @@ import {
   ShoppingCart,
   Store,
   Users,
+  Shield,
+  CreditCard,
+  ChevronDown,
+  ChevronRight,
+  Layers,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -35,6 +40,11 @@ const iconos = {
   "shopping-cart": ShoppingCart,
   store: Store,
   users: Users,
+  shield: Shield,
+  "credit-card": CreditCard,
+  "chevron-down": ChevronDown,
+  "chevron-right": ChevronRight,
+  layers: Layers,
   x: X,
 } satisfies Record<string, LucideIcon>;
 
