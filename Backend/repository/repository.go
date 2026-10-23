@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"multicatalogo-backend/config"
@@ -196,10 +197,14 @@ func (r *PostgresRepository) ObtenerRed() (*models.Referido, error) {
 }
 
 // CrearPedido ejecuta una transacción SQL ACID en PostgreSQL para registrar un pedido y sus items.
-func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutRequest) (*models.Pedido, error) {
+//
+// idempotencyKey activa la idempotencia (U4-T3, S10). Vacia = comportamiento de
+// siempre. Si el usuario ya uso esa key, NO crea un pedido nuevo: devuelve el que
+// esa key creo, con replay en true para que el controller responda 200 y no 201.
+func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error) {
 	pool, err := r.getPool()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -208,20 +213,41 @@ func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutReque
 	// 1. Iniciar Transacción SQL
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("error al iniciar transacción: %w", err)
+		return nil, false, fmt.Errorf("error al iniciar transacción: %w", err)
 	}
 	// Asegurar ROLLBACK en caso de salida con error o pánico antes del COMMIT
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
 
-	// 2. Calcular total del pedido
+	// 2. Replay de idempotencia. Va antes de calcular el total y antes de tocar
+	//    la tabla pedidos: si la key ya se uso, todo lo que viene abajo es
+	//    trabajo que se descarta.
+	if idempotencyKey != "" {
+		var pedidoIDExistente int
+		errReplay := tx.QueryRow(ctx,
+			`SELECT pedido_id FROM checkout_idempotencia WHERE usuario_id = $1 AND clave = $2`,
+			usuarioID, idempotencyKey,
+		).Scan(&pedidoIDExistente)
+		if errReplay == nil {
+			pedido, err := r.leerPedido(ctx, tx, pedidoIDExistente)
+			if err != nil {
+				return nil, false, err
+			}
+			return pedido, true, nil
+		}
+		if !errors.Is(errReplay, pgx.ErrNoRows) {
+			return nil, false, fmt.Errorf("error al consultar la idempotencia del checkout: %w", errReplay)
+		}
+	}
+
+	// 3. Calcular total del pedido
 	var total float64
 	for _, item := range req.Items {
 		total += item.Precio * float64(item.Cantidad)
 	}
 
-	// 3. Insertar registro principal en tabla pedidos
+	// 4. Insertar registro principal en tabla pedidos
 	insertPedidoQuery := `
 		INSERT INTO pedidos (usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado)
 		VALUES ($1, $2, $3, $4, $5, 'completado')
@@ -231,10 +257,10 @@ func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutReque
 	var creadoAt time.Time
 	err = tx.QueryRow(ctx, insertPedidoQuery, usuarioID, req.NombreCliente, req.EmailCliente, req.MetodoPago, total).Scan(&pedidoID, &creadoAt)
 	if err != nil {
-		return nil, fmt.Errorf("error al insertar pedido: %w", err)
+		return nil, false, fmt.Errorf("error al insertar pedido: %w", err)
 	}
 
-	// 4. Insertar cada item en tabla pedido_items dentro de la misma transacción
+	// 5. Insertar cada item en tabla pedido_items dentro de la misma transacción
 	insertItemQuery := `
 		INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario, subtotal)
 		VALUES ($1, $2, $3, $4, $5)
@@ -243,13 +269,34 @@ func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutReque
 		subtotal := item.Precio * float64(item.Cantidad)
 		_, err = tx.Exec(ctx, insertItemQuery, pedidoID, item.ProductoID, item.Cantidad, item.Precio, subtotal)
 		if err != nil {
-			return nil, fmt.Errorf("error al insertar item %d del pedido: %w", item.ProductoID, err)
+			return nil, false, fmt.Errorf("error al insertar item %d del pedido: %w", item.ProductoID, err)
 		}
 	}
 
-	// 5. Commit de la transacción
+	// 6. Reservar la key DENTRO de la misma transacción que crea el pedido. Si
+	//    esta línea falla, el rollback se lleva el pedido con ella: nunca queda
+	//    un pedido sin key, que es el estado que permite duplicar en el reintento.
+	if idempotencyKey != "" {
+		_, err = tx.Exec(ctx,
+			`INSERT INTO checkout_idempotencia (usuario_id, clave, pedido_id) VALUES ($1, $2, $3)`,
+			usuarioID, idempotencyKey, pedidoID,
+		)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			// 23505 = unique_violation: dos requests con la misma key pasaron a
+			// la vez el SELECT del paso 2 y los dos llegaron al INSERT. Gana el
+			// que.committeo primero; este hace rollback y devuelve su pedido.
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				_ = tx.Rollback(ctx)
+				return r.replayPorClave(usuarioID, idempotencyKey)
+			}
+			return nil, false, fmt.Errorf("error al registrar la idempotencia del checkout: %w", err)
+		}
+	}
+
+	// 7. Commit de la transacción
 	if err = tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("error al confirmar transacción (commit): %w", err)
+		return nil, false, fmt.Errorf("error al confirmar transacción (commit): %w", err)
 	}
 
 	pedido := &models.Pedido{
@@ -263,7 +310,58 @@ func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutReque
 		CreadoAt:      creadoAt.Format(time.RFC3339),
 	}
 
-	return pedido, nil
+	return pedido, false, nil
+}
+
+// replayPorClave resuelve el caso de carrera: la key ya quedó asociada a otro
+// pedido, asi que se devuelve ese. Corre por el pool y no por la transacción
+// porque para entonces esta ya hizo rollback.
+func (r *PostgresRepository) replayPorClave(usuarioID int, clave string) (*models.Pedido, bool, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, false, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var pedidoID int
+	err = pool.QueryRow(ctx,
+		`SELECT pedido_id FROM checkout_idempotencia WHERE usuario_id = $1 AND clave = $2`,
+		usuarioID, clave,
+	).Scan(&pedidoID)
+	if err != nil {
+		return nil, false, fmt.Errorf("error al resolver la carrera de idempotencia: %w", err)
+	}
+	pedido, err := r.leerPedido(ctx, pool, pedidoID)
+	if err != nil {
+		return nil, false, err
+	}
+	return pedido, true, nil
+}
+
+// consultor es lo mínimo para leer un pedido: sirve el pool y la transacción
+// por igual, para no duplicar la consulta en replayPorClave y en CrearPedido.
+type consultor interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// leerPedido reconstruye el pedido desde la fila guardada. El replay tiene que
+// devolver exactamente la misma respuesta que dio el request original, y eso
+// solo se puede armar leyendo los datos que quedaron guardados.
+func (r *PostgresRepository) leerPedido(ctx context.Context, q consultor, pedidoID int) (*models.Pedido, error) {
+	var pedido models.Pedido
+	var creadoAt time.Time
+	err := q.QueryRow(ctx,
+		`SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
+		 FROM pedidos WHERE id = $1`,
+		pedidoID,
+	).Scan(&pedido.ID, &pedido.UsuarioID, &pedido.NombreCliente, &pedido.EmailCliente,
+		&pedido.MetodoPago, &pedido.Total, &pedido.Estado, &creadoAt)
+	if err != nil {
+		return nil, fmt.Errorf("error al leer el pedido %d: %w", pedidoID, err)
+	}
+	pedido.CreadoAt = creadoAt.Format(time.RFC3339)
+	return &pedido, nil
 }
 
 // ActualizarComisiones actualiza los saldos/ventas de la red ascendente de forma recursiva o jerárquica.

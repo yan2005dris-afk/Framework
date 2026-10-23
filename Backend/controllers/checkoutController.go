@@ -4,6 +4,7 @@ package controllers
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"multicatalogo-backend/controllers/helpers"
@@ -70,8 +71,18 @@ func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 		req.EmailCliente = tokenEmail
 	}
 
+	// Idempotency-Key (U4-T3, S10): la clave que el cliente manda en el reintento
+	// de un checkout. Opcional a proposito: un cliente viejo, o uno que no este
+	// en la PWA, sigue funcionando sin ella, solo que sin proteccion contra el
+	// reintento que duplica pedidos. El largo se limita porque va a una columna
+	// VARCHAR(255) y es un identificador que genera el cliente, no texto libre.
+	idempotencyKey := strings.TrimSpace(ctx.Get("Idempotency-Key"))
+	if len(idempotencyKey) > 255 {
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "El header Idempotency-Key excede los 255 caracteres"}.Write(ctx)
+	}
+
 	// Paso 3: Transacción ACID en PostgreSQL (tx.Begin, INSERTs, Rollback/Commit)
-	pedido, err := c.dbRepo.CrearPedido(usuarioIDVal, req)
+	pedido, replay, err := c.dbRepo.CrearPedido(usuarioIDVal, req, idempotencyKey)
 	if err != nil {
 		log.Printf("❌ Error en transacción de checkout: %v", err)
 		public, detail := helpers.SanitizeErrorDetails(c.appEnv, err)
@@ -79,6 +90,18 @@ func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 			public = "Error al procesar el pedido. Transacción revertida."
 		}
 		return models.APIError{Status: fiber.StatusInternalServerError, Error: public, Detalle: detail}.Write(ctx)
+	}
+
+	// Un replay no vuelve a cobrar comisiones: el pedido ya las aplicó el primer
+	// intento. Volver a sumarlas seria el mismo bug de duplicado, un paso mas
+	// abajo y mas dificil de detectar.
+	if replay {
+		return ctx.Status(fiber.StatusOK).JSON(models.CheckoutResponse{
+			PedidoID: pedido.ID,
+			Numero:   fmt.Sprintf("MC-%06d", pedido.ID),
+			Total:    pedido.Total,
+			Mensaje:  "Este pedido ya se había confirmado. Te mostramos el original.",
+		})
 	}
 
 	// Paso 4: Concurrencia con Goroutine en segundo plano (Misión Crítica)

@@ -105,3 +105,10 @@ L13. Smoke con el stack entero arriba (6/6 healthy): `/health` responde 200; 15 
 L14. Todas las tasks del slice 1 y del slice 2 estan commiteadas y verificadas. Lo que falta para
     cerrar #20 y #21 es la parte que decide el humanso: push de la rama, apertura de los PR y
     cierre de las issues una vez mergeado.
+L15. Cierre: PR #43 (slice 1) y PR #45 (slice 2) mergeados en `develop` por el usuario; #20 y #21
+    cerradas con evidencia. El push del PR 2 no pudo hacerse con el token de `gh` (le falta el
+    scope `workflow`), asi que se subio la rama por SSH sin cambiar el remote del repo.
+    Queda pendiente de su decision: promote de `develop` a `main` (main esta 6 commits atras), el
+    PR de la limpieza del frontend (rama `chore/frontend-quitar-codigo-muerto`, commit 8a2a4d4) y
+    el CI que no dispara en ramas `feat/*` porque `.github/workflows/ci.yml` escucha en `main` y
+    `feature/**` mientras el repo trabaja sobre `develop`.

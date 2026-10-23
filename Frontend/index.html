@@ -1,10 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>proyecto</title>
+    <!-- U4-T3 · PWA. Sin theme-color, Chrome en Android usa el fondo blanco
+         por defecto y la barra de estado queda blanca sobre contenido claro. -->
+    <meta name="theme-color" content="#ffffff" />
+    <!-- El manifest vive en `public/`, asi que Vite lo copia a la raiz del
+         build sin procesarlo. Se lo enlaza a mano en vez de dejar que el plugin
+         lo inyecte, para que haya una sola fuente de verdad del manifest. -->
+    <link rel="manifest" href="/manifest.json" />
+    <!-- iOS no lee el manifest: necesita el icono por su cuenta. -->
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="MultiCatálogo" />
+    <meta
+      name="description"
+      content="Tienda de cosméticos con red de ventas multinivel"
+    />
+    <title>MultiCatálogo</title>
   </head>
   <body>
     <div id="root"></div>

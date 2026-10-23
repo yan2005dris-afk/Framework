@@ -62,6 +62,11 @@ func main() {
 		app.Post("/auth/logout", hAuth.Logout)
 		app.Post("/auth/refresh", hAuth.Refresh)
 		app.Post("/auth/validate", hAuth.Validate)
+		// El gateway llama a /auth/validate con GET (ver el forward_auth del
+		// Caddyfile): con POST, Caddy consumia el body del request original y
+		// el checkout quedaba en 502. GET y POST quedan registrados para que
+		// el endpoint no dependa de como lo invoque cada cliente.
+		app.Get("/auth/validate", hAuth.Validate)
 		app.Get("/auth/me", hAuth.Me)
 	}
 
