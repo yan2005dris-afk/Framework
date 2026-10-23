@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getRed } from "../services/redService";
+import { api, type ResumenComisionesDTO } from "../services/api";
 import {
   contarRed,
   sumarVentasRed,
@@ -31,11 +32,6 @@ const NIVEL_ESTILO: Record<
   },
 };
 
-/**
- * Componente recursivo para renderizar cada nodo del árbol de referidos multinivel.
- * @param {Object} props - Propiedades del componente.
- * @param {Referido} props.nodo - Nodo del miembro de la red.
- */
 const NodoReferido = ({ nodo }: { nodo: Referido }) => {
   const estilo = NIVEL_ESTILO[nodo.nivel] ?? NIVEL_ESTILO[1];
   const comision = comisionDeReferido(nodo);
@@ -80,52 +76,38 @@ const NodoReferido = ({ nodo }: { nodo: Referido }) => {
   );
 };
 
-/**
- * Vista de Mi Red con árbol jerárquico y cálculo de comisiones multinivel consumidas desde el backend.
- */
 const MiRed = () => {
   const [red, setRed] = useState<Referido | null>(null);
+  const [comisionesResumen, setComisionesResumen] = useState<ResumenComisionesDTO | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState<boolean>(false);
 
-  const cargarRed = () => {
+  const cargarDatos = () => {
     setLoading(true);
     setError(null);
-    getRed()
-      .then((data) => {
-        setRed(data);
+    Promise.all([getRed(), api.getComisionesMias().catch(() => null)])
+      .then(([dataRed, dataComisiones]) => {
+        setRed(dataRed);
+        setComisionesResumen(dataComisiones);
         setLoading(false);
       })
       .catch((err: unknown) => {
-        setError(
-          err instanceof Error ? err.message : "Error al cargar la red multinivel"
-        );
+        setError(err instanceof Error ? err.message : "Error al cargar la red multinivel");
         setLoading(false);
       });
   };
 
   useEffect(() => {
-    let activo = true;
-    getRed()
-      .then((data) => {
-        if (activo) {
-          setRed(data);
-          setLoading(false);
-        }
-      })
-      .catch((err: unknown) => {
-        if (activo) {
-          setError(
-            err instanceof Error ? err.message : "Error al cargar la red multinivel"
-          );
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      activo = false;
-    };
+    cargarDatos();
   }, []);
+
+  const copiarEnlace = () => {
+    const enlace = `${window.location.origin}/registro?ref=TU`;
+    navigator.clipboard.writeText(enlace);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  };
 
   if (loading) {
     return <div className="text-center p-8 text-slate-500">Cargando red multinivel...</div>;
@@ -136,7 +118,7 @@ const MiRed = () => {
       <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-xl text-center space-y-3">
         <p className="font-semibold">{error || "No se pudo cargar la red"}</p>
         <button
-          onClick={cargarRed}
+          onClick={cargarDatos}
           className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition"
         >
           Reintentar
@@ -174,34 +156,131 @@ const MiRed = () => {
   ];
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-800 mb-2">
-        Mi Red de Referidos
-      </h1>
-      <p className="text-slate-500 mb-6">
-        Estructura multinivel: gana el {TASA_COMISION[1] * 100} % de nivel 1,{" "}
-        {TASA_COMISION[2] * 100} % de nivel 2 y {TASA_COMISION[3] * 100} % de nivel 3.
-      </p>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800 mb-2">
+          Mi Red de Referidos
+        </h1>
+        <p className="text-slate-500 text-sm">
+          Estructura multinivel: gana el {TASA_COMISION[1] * 100} % de nivel 1,{" "}
+          {TASA_COMISION[2] * 100} % de nivel 2 y {TASA_COMISION[3] * 100} % de nivel 3.
+        </p>
+      </div>
+
+      {/* Banner de Invitación de Referido */}
+      <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 text-white rounded-xl p-6 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-bold">Tu Enlace de Patrocinador</h3>
+          <p className="text-indigo-100 text-xs mt-1">
+            Comparte este enlace para que nuevos distribuidores o clientes se registren en tu red
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-lg border border-white/20">
+          <input
+            type="text"
+            readOnly
+            value={`${typeof window !== "undefined" ? window.location.origin : ""}/registro?ref=TU`}
+            className="bg-transparent text-xs text-white px-2 py-1 outline-none w-48 sm:w-64 select-all font-mono"
+          />
+          <button
+            onClick={copiarEnlace}
+            className="bg-white text-indigo-700 hover:bg-indigo-50 font-bold text-xs px-3.5 py-1.5 rounded transition shadow-sm"
+          >
+            {copiado ? "¡Copiado!" : "Copiar Enlace"}
+          </button>
+        </div>
+      </div>
 
       {/* Tarjetas de resumen */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {resumen.map((item) => (
           <div
             key={item.etiqueta}
-            className="bg-white p-6 rounded-lg shadow-sm border border-slate-100"
+            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200"
           >
-            <p className="text-sm text-slate-500 uppercase font-semibold">
+            <p className="text-xs text-slate-500 uppercase font-semibold">
               {item.etiqueta}
             </p>
-            <p className={`text-3xl font-bold mt-2 ${item.color}`}>
+            <p className={`text-2xl font-bold mt-2 ${item.color}`}>
               {item.valor}
             </p>
           </div>
         ))}
       </div>
 
+      {/* Ledger de Comisiones Devengadas */}
+      {comisionesResumen && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="font-bold text-slate-900 text-base">Ledger de Comisiones</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Auditoría detallada de cada comisión generada por tus referidos</p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-lg">
+                Pendiente: ${comisionesResumen.totalPendiente.toFixed(2)}
+              </span>
+              <span className="text-xs font-semibold bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-lg">
+                Pagado: ${comisionesResumen.totalPagado.toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
+                  <th className="py-3 px-4">Pedido ID</th>
+                  <th className="py-3 px-4">Nivel MLM</th>
+                  <th className="py-3 px-4">Tasa</th>
+                  <th className="py-3 px-4">Monto</th>
+                  <th className="py-3 px-4">Fecha</th>
+                  <th className="py-3 px-4 text-right">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-800">
+                {comisionesResumen.comisiones.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400 text-xs">
+                      No hay registros en el ledger todavía.
+                    </td>
+                  </tr>
+                ) : (
+                  comisionesResumen.comisiones.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate-50/75 transition text-xs">
+                      <td className="py-3 px-4 font-mono font-semibold text-slate-900">
+                        #{c.pedidoId}
+                      </td>
+                      <td className="py-3 px-4">Nivel {c.nivel}</td>
+                      <td className="py-3 px-4">{c.porcentaje}%</td>
+                      <td className="py-3 px-4 font-bold text-green-600">${c.monto.toFixed(2)}</td>
+                      <td className="py-3 px-4 text-slate-500">
+                        {new Date(c.creadoEn).toLocaleDateString("es-ES")}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-semibold capitalize ${
+                            c.estado === "pagada"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {c.estado}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Árbol de referidos */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <h2 className="text-lg font-bold text-slate-800 mb-4">
           Jerarquía de tu Red
         </h2>

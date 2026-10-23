@@ -27,6 +27,7 @@ export type NavPath =
   | "/mis-pedidos"
   | "/admin/productos"
   | "/admin/pedidos"
+  | "/admin/liquidaciones"
   | "/saas"
   | "/planes"
   | "/usuarios-saas";
@@ -61,6 +62,7 @@ const navMenu: NavGroupItem[] = [
   { name: "Dashboard", path: "/", icon: "layout-dashboard", soloAdmin: true },
   { name: "Gestión Productos", path: "/admin/productos", icon: "store", soloAdmin: true },
   { name: "Gestión Pedidos", path: "/admin/pedidos", icon: "credit-card", soloAdmin: true },
+  { name: "Liquidaciones", path: "/admin/liquidaciones", icon: "credit-card", soloAdmin: true },
   {
     name: "Panel SaaS",
     icon: "shield",

@@ -1,72 +1,64 @@
 import { useEffect, useState } from "react";
-import { getRed } from "../../services/redService";
 import {
-  contarRed,
-  sumarVentasRed,
-  sumarComisiones,
-  nivelAlcanzado,
-  comisionDeReferido,
-  type Referido,
-} from "../../data/red";
+  api,
+  type ReporteResumenDTO,
+  type TopProductoDTO,
+  type TopReferidoDTO,
+} from "../../services/api";
 
 /**
- * Vista de Dashboard con KPIs dinámicos calculados a partir de la red multinivel en el backend.
+ * Vista de Dashboard administrativo conectada a los reportes reales de negocio (Fase 6).
  */
 const Dashboard = () => {
-  const [red, setRed] = useState<Referido | null>(null);
+  const [resumen, setResumen] = useState<ReporteResumenDTO | null>(null);
+  const [topProductos, setTopProductos] = useState<TopProductoDTO[]>([]);
+  const [topReferidos, setTopReferidos] = useState<TopReferidoDTO[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const cargarRed = () => {
+  const cargarMetricas = () => {
     setLoading(true);
     setError(null);
-    getRed()
-      .then((data) => {
-        setRed(data);
+
+    Promise.all([
+      api.getReporteResumen(),
+      api.getTopProductos(5),
+      api.getTopReferidos(5),
+    ])
+      .then(([resumenData, prodsData, refsData]) => {
+        setResumen(resumenData);
+        setTopProductos(prodsData.data || []);
+        setTopReferidos(refsData.data || []);
         setLoading(false);
       })
       .catch((err: unknown) => {
         setError(
-          err instanceof Error ? err.message : "Error al cargar datos del Dashboard"
+          err instanceof Error ? err.message : "Error al cargar reportes de negocio"
         );
         setLoading(false);
       });
   };
 
   useEffect(() => {
-    let activo = true;
-    getRed()
-      .then((data) => {
-        if (activo) {
-          setRed(data);
-          setLoading(false);
-        }
-      })
-      .catch((err: unknown) => {
-        if (activo) {
-          setError(
-            err instanceof Error ? err.message : "Error al cargar datos del Dashboard"
-          );
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      activo = false;
-    };
+    cargarMetricas();
   }, []);
 
   if (loading) {
-    return <div className="text-center p-8 text-slate-500">Cargando métricas...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-slate-500 space-y-3">
+        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <p className="font-medium">Cargando métricas de negocio...</p>
+      </div>
+    );
   }
 
-  if (error || !red) {
+  if (error || !resumen) {
     return (
       <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-xl text-center space-y-3">
-        <p className="font-semibold">{error || "No se pudo cargar la información"}</p>
+        <p className="font-semibold">{error || "No se pudo cargar la información de reportes"}</p>
         <button
-          onClick={cargarRed}
-          className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition"
+          onClick={cargarMetricas}
+          className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition"
         >
           Reintentar
         </button>
@@ -74,132 +66,151 @@ const Dashboard = () => {
     );
   }
 
-  const referidosDirectos = red.hijos?.length ?? 0;
-  const referidosActivos = contarRed(red);
-  const ventasRed = sumarVentasRed(red);
-  const comisionesMes = sumarComisiones(red);
-  const nivel = nivelAlcanzado(referidosDirectos);
-
   const kpis = [
     {
-      etiqueta: "Ventas de la Red",
-      valor: `$${ventasRed.toLocaleString()}`,
+      etiqueta: "Ventas Totales",
+      valor: `$${resumen.totalVendido.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       color: "text-indigo-600",
+      descripcion: "Volumen acumulado pagado",
     },
     {
-      etiqueta: "Referidos Activos",
-      valor: referidosActivos.toString(),
-      color: "text-indigo-600",
+      etiqueta: "Pedidos Procesados",
+      valor: resumen.numeroPedidos.toString(),
+      color: "text-blue-600",
+      descripcion: "Total de órdenes registradas",
     },
     {
-      etiqueta: "Comisiones del Mes",
-      valor: `$${comisionesMes.toFixed(2)}`,
-      color: "text-green-600",
+      etiqueta: "Ticket Promedio",
+      valor: `$${resumen.ticketPromedio.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      color: "text-emerald-600",
+      descripcion: "Gasto medio por orden",
     },
     {
-      etiqueta: "Nivel Actual",
-      valor: nivel,
+      etiqueta: "Comisiones Devengadas",
+      valor: `$${resumen.comisionesDevengadas.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       color: "text-amber-600",
+      descripcion: "Repartido a red de afiliados",
     },
   ];
 
-  const topReferidos = [...(red.hijos ?? [])]
-    .sort((a, b) => b.ventas - a.ventas)
-    .slice(0, 3);
-
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-800 mb-6">Resumen General</h1>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800">Panel de Control & Reportes</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Métricas consolidadas de ventas, volumen transaccional y comisiones MLM.
+        </p>
+      </div>
 
-      {/* KPIs derivados del estado */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+      {/* Tarjetas de KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {kpis.map((kpi) => (
           <div
             key={kpi.etiqueta}
-            className="bg-white p-6 rounded-lg shadow-sm border border-slate-100"
+            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between"
           >
-            <p className="text-sm text-slate-500 uppercase font-semibold">
-              {kpi.etiqueta}
-            </p>
-            <p className={`text-3xl font-bold mt-2 ${kpi.color}`}>
-              {kpi.valor}
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider font-bold">
+                {kpi.etiqueta}
+              </p>
+              <p className={`text-3xl font-extrabold mt-2 ${kpi.color}`}>
+                {kpi.valor}
+              </p>
+            </div>
+            <p className="text-xs text-slate-400 mt-4 border-t border-slate-100 pt-2">
+              {kpi.descripcion}
             </p>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Referidos */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-100">
-          <h2 className="text-lg font-bold text-slate-800 mb-4">
-            Top Referidos del Mes
-          </h2>
-          <div className="space-y-3">
-            {topReferidos.map((ref, idx) => (
-              <div
-                key={ref.id}
-                className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center">
-                    {idx + 1}
-                  </span>
-                  <div>
-                    <p className="font-semibold text-slate-800">{ref.nombre}</p>
-                    <p className="text-xs text-slate-500">Nivel {ref.nivel}</p>
+        {/* Top Productos */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-slate-800">
+              Top Productos Más Vendidos
+            </h2>
+            <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-semibold">
+              Por Ingresos
+            </span>
+          </div>
+
+          {topProductos.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">
+              No hay ventas registradas aún.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {topProductos.map((prod, idx) => (
+                <div
+                  key={prod.productoId}
+                  className="flex items-center justify-between p-3.5 rounded-lg border border-slate-100 hover:bg-slate-50 transition"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold text-sm flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-slate-800 text-sm">{prod.nombre}</p>
+                      <p className="text-xs text-slate-500">
+                        {prod.cantidad} {prod.cantidad === 1 ? "unidad vendida" : "unidades vendidas"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-slate-800 text-sm">
+                      ${prod.totalVentas.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-slate-400">Total recaudado</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold text-slate-800">
-                    ${ref.ventas.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-indigo-600 font-semibold">
-                    +${comisionDeReferido(ref).toFixed(2)}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Progreso de Nivel */}
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-100">
-          <h2 className="text-lg font-bold text-slate-800 mb-4">
-            Progreso al Siguiente Nivel
-          </h2>
-          <p className="text-slate-500 text-sm mb-4">
-            {referidosDirectos} referidos directos. El nivel se calcula con:
-          </p>
-          <ul className="space-y-2 text-sm text-slate-600 mb-6">
-            <li className="flex justify-between">
-              <span>Bronce</span>
-              <span>0 – 1 directos</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Plata</span>
-              <span>2 – 3 directos</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Oro</span>
-              <span>4 – 5 directos</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Diamante</span>
-              <span>6+ directos</span>
-            </li>
-          </ul>
-
-          <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all"
-              style={{
-                width: `${Math.min((referidosDirectos / 6) * 100, 100)}%`,
-              }}
-            />
+        {/* Top Distribuidores / Referidos */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-slate-800">
+              Top Distribuidores de la Red
+            </h2>
+            <span className="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-semibold">
+              Ventas de Red
+            </span>
           </div>
-          <p className="text-center text-sm text-slate-500 mt-2 font-semibold">
-            Nivel actual: {nivel} ({referidosDirectos} / 6 directos para Diamante)
-          </p>
+
+          {topReferidos.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">
+              No hay distribuidores con volumen generado aún.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {topReferidos.map((ref, idx) => (
+                <div
+                  key={ref.referidoId}
+                  className="flex items-center justify-between p-3.5 rounded-lg border border-slate-100 hover:bg-slate-50 transition"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-slate-800 text-sm">{ref.nombre}</p>
+                      <p className="text-xs text-slate-500">Nivel {ref.nivel}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-slate-800 text-sm">
+                      ${ref.ventas.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-emerald-600 font-semibold">Volumen de Red</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

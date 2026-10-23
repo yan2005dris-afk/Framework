@@ -1,3 +1,38 @@
+export interface ComisionDTO {
+  id: number;
+  pedidoId: number;
+  referidoId: number;
+  nivel: number;
+  porcentaje: number;
+  monto: number;
+  estado: string;
+  liquidacionId?: number;
+  creadoEn: string;
+}
+
+export interface ResumenComisionesDTO {
+  referidoId: number;
+  totalPendiente: number;
+  totalPagado: number;
+  comisiones: ComisionDTO[];
+}
+
+export interface LiquidacionDTO {
+  id: number;
+  referidoId: number;
+  total: number;
+  estado: string;
+  creadoEn: string;
+  pagadaEn: string;
+}
+
+export interface DeudaDistribuidorDTO {
+  referidoId: number;
+  nombre: string;
+  totalPendiente: number;
+  numeroComisiones: number;
+}
+
 export interface PedidoItemDetalleDTO {
   id: number;
   pedidoId: number;
@@ -41,6 +76,27 @@ export interface ProductoAdminDTO {
   galeria: string[];
   activo: boolean;
   stock: number;
+}
+
+export interface ReporteResumenDTO {
+  totalVendido: number;
+  numeroPedidos: number;
+  ticketPromedio: number;
+  comisionesDevengadas: number;
+}
+
+export interface TopProductoDTO {
+  productoId: number;
+  nombre: string;
+  totalVentas: number;
+  cantidad: number;
+}
+
+export interface TopReferidoDTO {
+  referidoId: number;
+  nombre: string;
+  nivel: number;
+  ventas: number;
 }
 
 export interface GuardarProductoPayload {
@@ -233,6 +289,77 @@ export const api = {
     return apiFetch<{ mensaje: string; estado: string }>(`/pedidos/${id}/estado`, {
       method: "PATCH",
       json: { estado: nuevoEstado },
+    });
+  },
+
+  /**
+   * GET /api/comisiones/mias
+   * Ledger de comisiones y saldo pendiente del usuario autenticado.
+   */
+  getComisionesMias(): Promise<ResumenComisionesDTO> {
+    return apiFetch<ResumenComisionesDTO>("/comisiones/mias", { method: "GET" });
+  },
+
+  /**
+   * GET /api/liquidaciones/mias
+   * Historial de pagos liquidados al usuario actual.
+   */
+  getLiquidacionesMias(): Promise<{ liquidaciones: LiquidacionDTO[] }> {
+    return apiFetch<{ liquidaciones: LiquidacionDTO[] }>("/liquidaciones/mias", { method: "GET" });
+  },
+
+  /**
+   * GET /api/liquidaciones
+   * Historial de todas las liquidaciones (admin).
+   */
+  getLiquidacionesAdmin(): Promise<{ liquidaciones: LiquidacionDTO[] }> {
+    return apiFetch<{ liquidaciones: LiquidacionDTO[] }>("/liquidaciones", { method: "GET" });
+  },
+
+  /**
+   * GET /api/reportes/resumen
+   * KPIs generales de ventas y comisiones del negocio (admin).
+   */
+  getReporteResumen(desde?: string, hasta?: string): Promise<ReporteResumenDTO> {
+    const params = new URLSearchParams();
+    if (desde) params.append("desde", desde);
+    if (hasta) params.append("hasta", hasta);
+    const queryString = params.toString() ? `?${params.toString()}` : "";
+    return apiFetch<ReporteResumenDTO>(`/reportes/resumen${queryString}`, { method: "GET" });
+  },
+
+  /**
+   * GET /api/reportes/top-productos
+   * Ranking de productos con mayores ventas (admin).
+   */
+  getTopProductos(limit = 5): Promise<{ data: TopProductoDTO[] }> {
+    return apiFetch<{ data: TopProductoDTO[] }>(`/reportes/top-productos?limit=${limit}`, { method: "GET" });
+  },
+
+  /**
+   * GET /api/reportes/top-referidos
+   * Distribuidores con más ventas consolidadas en su red (admin).
+   */
+  getTopReferidos(limit = 10): Promise<{ data: TopReferidoDTO[] }> {
+    return apiFetch<{ data: TopReferidoDTO[] }>(`/reportes/top-referidos?limit=${limit}`, { method: "GET" });
+  },
+
+  /**
+   * GET /api/reportes/comisiones-pendientes
+   * Deuda por distribuidor pendiente de liquidar (admin).
+   */
+  getComisionesPendientes(): Promise<{ data: DeudaDistribuidorDTO[] }> {
+    return apiFetch<{ data: DeudaDistribuidorDTO[] }>("/reportes/comisiones-pendientes", { method: "GET" });
+  },
+
+  /**
+   * POST /api/liquidaciones
+   * Liquidar comisiones pendientes de un distribuidor (admin).
+   */
+  liquidarComisiones(referidoId: number): Promise<{ mensaje: string; liquidacion: LiquidacionDTO }> {
+    return apiFetch<{ mensaje: string; liquidacion: LiquidacionDTO }>("/liquidaciones", {
+      method: "POST",
+      json: { referidoId },
     });
   },
 
