@@ -67,11 +67,6 @@ func (ac *AuthController) Logout(c *fiber.Ctx) error {
 	return ac.proxy(c, http.MethodPost, "/auth/logout")
 }
 
-// Refresh hace proxy a POST /auth/refresh.
-func (ac *AuthController) Refresh(c *fiber.Ctx) error {
-	return ac.proxy(c, http.MethodPost, "/auth/refresh")
-}
-
 // Me devuelve la identidad del request actual desde c.Locals (poblada por
 // middleware.RequireAuth). Esto evita round-trip al auth-service cuando
 // la sesion ya fue validada por el middleware local (defensa en profundidad).
