@@ -104,7 +104,10 @@ const SidebarContent = ({
             <span className="truncate text-lg font-bold tracking-tight">
               MultiCatálogo
             </span>
-          )}
+          ) && (
+              <span className="flex-col"> Yandris Riviera</span>
+            )
+          }
         </div>
 
         {onClose && (
