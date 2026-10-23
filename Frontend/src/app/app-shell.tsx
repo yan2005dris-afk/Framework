@@ -5,6 +5,7 @@ import { CartProvider } from "@/Context/CartProvider";
 import { useAuth } from "@/Context/useAuth";
 import { UpdateBanner } from "@/Components/Pwa/UpdateBanner";
 import { OfflineGuard } from "@/Components/Pwa/OfflineGuard";
+import { CheckoutRetryWatcher } from "@/Components/Pwa/CheckoutRetryWatcher";
 import { router } from "@/router";
 
 /**
@@ -63,6 +64,8 @@ export const AppShell = () => (
       <UpdateBanner />
       {/* Cae a /offline en cuanto se pierde la conexion. */}
       <OfflineGuard />
+      {/* Reintenta los checkouts que quedaron a medio enviar (U4-T3). */}
+      <CheckoutRetryWatcher />
       <RouterBridge />
     </CartBoundary>
   </AuthProvider>
