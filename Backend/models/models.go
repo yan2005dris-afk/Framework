@@ -128,3 +128,39 @@ type PedidoItem struct {
 	PrecioUnitario float64 `json:"precioUnitario"`
 	Subtotal       float64 `json:"subtotal"`
 }
+
+// Comision representa una entrada en el ledger de comisiones devengadas.
+type Comision struct {
+	ID            int      `json:"id"`
+	PedidoID      int      `json:"pedidoId"`
+	ReferidoID    int      `json:"referidoId"`
+	Nivel         int      `json:"nivel"`
+	Porcentaje    float64  `json:"porcentaje"`
+	Monto         float64  `json:"monto"`
+	Estado        string   `json:"estado"`
+	LiquidacionID *int     `json:"liquidacionId,omitempty"`
+	CreadoEn      string   `json:"creadoEn"`
+}
+
+// ResumenComisiones resume los montos pendientes y pagados de un distribuidor.
+type ResumenComisiones struct {
+	ReferidoID      int        `json:"referidoId"`
+	TotalPendiente  float64    `json:"totalPendiente"`
+	TotalPagado     float64    `json:"totalPagado"`
+	Comisiones      []Comision `json:"comisiones"`
+}
+
+// Liquidacion representa la consolidación y pago de comisiones pendientes.
+type Liquidacion struct {
+	ID         int     `json:"id"`
+	ReferidoID int     `json:"referidoId"`
+	Total      float64 `json:"total"`
+	Estado     string  `json:"estado"`
+	CreadoEn   string  `json:"creadoEn"`
+	PagadaEn   string  `json:"pagadaEn"`
+}
+
+// LiquidarRequest define el payload para liquidar las comisiones de un referido.
+type LiquidarRequest struct {
+	ReferidoID int `json:"referidoId"`
+}

@@ -465,3 +465,271 @@ func ObtenerProductoPorID(id int) (*models.Producto, error) {
 func ObtenerRed() (*models.Referido, error) {
 	return defaultRepo.ObtenerRed()
 }
+
+// Tasas estándar de comisión MLM por nivel (Nivel 1: 10%, Nivel 2: 5%, Nivel 3: 2%)
+var TasasComision = map[int]float64{
+	1: 0.10,
+	2: 0.05,
+	3: 0.02,
+}
+
+// RegistrarComisionesPedido calcula e inserta en el ledger de comisiones el desglose multinivel.
+func (r *PostgresRepository) RegistrarComisionesPedido(pedidoID int, compradorID int, totalPedido float64) ([]models.Comision, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Obtener la cadena ascendente de referidos (hasta 3 niveles) a partir del comprador
+	// Si comprador no existe en referidos, asignamos al nodo raíz (0) como nivel 1
+	rows, err := pool.Query(ctx, `
+		WITH RECURSIVE upline AS (
+			SELECT id, parent_id, 1 as nivel
+			FROM referidos
+			WHERE id = $1
+			UNION ALL
+			SELECT r.id, r.parent_id, u.nivel + 1
+			FROM referidos r
+			JOIN upline u ON r.id = u.parent_id
+			WHERE u.nivel < 3
+		)
+		SELECT id, nivel FROM upline WHERE id != $1 OR id = 0;
+	`, compradorID)
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar upline de referidos: %w", err)
+	}
+	defer rows.Close()
+
+	type uplineNode struct {
+		id    int
+		nivel int
+	}
+	var upline []uplineNode
+	for rows.Next() {
+		var u uplineNode
+		if err := rows.Scan(&u.id, &u.nivel); err == nil {
+			upline = append(upline, u)
+		}
+	}
+
+	// Si no hubo upline encontrado (ej. comprador no en referidos), atribuir al nodo 0
+	if len(upline) == 0 {
+		upline = append(upline, uplineNode{id: 0, nivel: 1})
+	}
+
+	var comisiones []models.Comision
+	for _, node := range upline {
+		tasa, ok := TasasComision[node.nivel]
+		if !ok {
+			tasa = 0.02
+		}
+		monto := totalPedido * tasa
+		porcentaje := tasa * 100.0
+
+		var id int
+		var creadoEn time.Time
+		err := pool.QueryRow(ctx, `
+			INSERT INTO comisiones (pedido_id, referido_id, nivel, porcentaje, monto, estado)
+			VALUES ($1, $2, $3, $4, $5, 'pendiente')
+			RETURNING id, creado_en
+		`, pedidoID, node.id, node.nivel, porcentaje, monto).Scan(&id, &creadoEn)
+		if err != nil {
+			// Si falla una inserción, loguear o continuar según caso
+			continue
+		}
+
+		comisiones = append(comisiones, models.Comision{
+			ID:         id,
+			PedidoID:   pedidoID,
+			ReferidoID: node.id,
+			Nivel:      node.nivel,
+			Porcentaje: porcentaje,
+			Monto:      monto,
+			Estado:     "pendiente",
+			CreadoEn:   creadoEn.Format(time.RFC3339),
+		})
+	}
+
+	return comisiones, nil
+}
+
+// ObtenerComisionesPorReferido consulta el historial y balance de comisiones devengadas.
+func (r *PostgresRepository) ObtenerComisionesPorReferido(referidoID int) (*models.ResumenComisiones, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, err := pool.Query(ctx, `
+		SELECT id, pedido_id, referido_id, nivel, porcentaje, monto, estado, liquidacion_id, creado_en
+		FROM comisiones
+		WHERE referido_id = $1
+		ORDER BY id DESC
+	`, referidoID)
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar comisiones: %w", err)
+	}
+	defer rows.Close()
+
+	resumen := &models.ResumenComisiones{
+		ReferidoID: referidoID,
+		Comisiones: make([]models.Comision, 0),
+	}
+
+	for rows.Next() {
+		var c models.Comision
+		var creadoEn time.Time
+		if err := rows.Scan(&c.ID, &c.PedidoID, &c.ReferidoID, &c.Nivel, &c.Porcentaje, &c.Monto, &c.Estado, &c.LiquidacionID, &creadoEn); err != nil {
+			return nil, err
+		}
+		c.CreadoEn = creadoEn.Format(time.RFC3339)
+		if c.Estado == "pendiente" {
+			resumen.TotalPendiente += c.Monto
+		} else if c.Estado == "pagada" {
+			resumen.TotalPagado += c.Monto
+		}
+		resumen.Comisiones = append(resumen.Comisiones, c)
+	}
+
+	return resumen, nil
+}
+
+// LiquidarComisiones liquida en una transacción ACID todas las comisiones pendientes de un referido.
+func (r *PostgresRepository) LiquidarComisiones(referidoID int) (*models.Liquidacion, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error al iniciar transacción de liquidación: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Bloquear y sumar comisiones pendientes con FOR UPDATE para evitar doble cobro
+	var totalPendiente float64
+	err = tx.QueryRow(ctx, `
+		SELECT COALESCE(SUM(monto), 0)
+		FROM comisiones
+		WHERE referido_id = $1 AND estado = 'pendiente'
+		FOR UPDATE
+	`, referidoID).Scan(&totalPendiente)
+	if err != nil {
+		return nil, fmt.Errorf("error al calcular monto a liquidar: %w", err)
+	}
+
+	if totalPendiente <= 0 {
+		return nil, errors.New("no hay comisiones pendientes para liquidar")
+	}
+
+	// 2. Crear registro de liquidación
+	var liq models.Liquidacion
+	var creadoEn, pagadaEn time.Time
+	err = tx.QueryRow(ctx, `
+		INSERT INTO liquidaciones (referido_id, total, estado, creado_en, pagada_en)
+		VALUES ($1, $2, 'completada', NOW(), NOW())
+		RETURNING id, referido_id, total, estado, creado_en, pagada_en
+	`, referidoID, totalPendiente).Scan(&liq.ID, &liq.ReferidoID, &liq.Total, &liq.Estado, &creadoEn, &pagadaEn)
+	if err != nil {
+		return nil, fmt.Errorf("error al registrar liquidación: %w", err)
+	}
+	liq.CreadoEn = creadoEn.Format(time.RFC3339)
+	liq.PagadaEn = pagadaEn.Format(time.RFC3339)
+
+	// 3. Actualizar comisiones asociadas a 'pagada' con el id de liquidación
+	_, err = tx.Exec(ctx, `
+		UPDATE comisiones
+		SET estado = 'pagada', liquidacion_id = $1
+		WHERE referido_id = $2 AND estado = 'pendiente'
+	`, liq.ID, referidoID)
+	if err != nil {
+		return nil, fmt.Errorf("error al actualizar estado de comisiones: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("error al confirmar liquidación: %w", err)
+	}
+
+	return &liq, nil
+}
+
+// ListarLiquidaciones devuelve el historial global de liquidaciones realizadas (Admin).
+func (r *PostgresRepository) ListarLiquidaciones() ([]models.Liquidacion, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, err := pool.Query(ctx, `
+		SELECT id, referido_id, total, estado, creado_en, pagada_en
+		FROM liquidaciones
+		ORDER BY id DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("error al listar liquidaciones: %w", err)
+	}
+	defer rows.Close()
+
+	var liquidaciones []models.Liquidacion
+	for rows.Next() {
+		var l models.Liquidacion
+		var cEn, pEn time.Time
+		if err := rows.Scan(&l.ID, &l.ReferidoID, &l.Total, &l.Estado, &cEn, &pEn); err != nil {
+			return nil, err
+		}
+		l.CreadoEn = cEn.Format(time.RFC3339)
+		l.PagadaEn = pEn.Format(time.RFC3339)
+		liquidaciones = append(liquidaciones, l)
+	}
+
+	return liquidaciones, nil
+}
+
+// ListarLiquidacionesPorReferido devuelve las liquidaciones correspondientes a un distribuidor específico.
+func (r *PostgresRepository) ListarLiquidacionesPorReferido(referidoID int) ([]models.Liquidacion, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, err := pool.Query(ctx, `
+		SELECT id, referido_id, total, estado, creado_en, pagada_en
+		FROM liquidaciones
+		WHERE referido_id = $1
+		ORDER BY id DESC
+	`, referidoID)
+	if err != nil {
+		return nil, fmt.Errorf("error al listar liquidaciones de referido: %w", err)
+	}
+	defer rows.Close()
+
+	var liquidaciones []models.Liquidacion
+	for rows.Next() {
+		var l models.Liquidacion
+		var cEn, pEn time.Time
+		if err := rows.Scan(&l.ID, &l.ReferidoID, &l.Total, &l.Estado, &cEn, &pEn); err != nil {
+			return nil, err
+		}
+		l.CreadoEn = cEn.Format(time.RFC3339)
+		l.PagadaEn = pEn.Format(time.RFC3339)
+		liquidaciones = append(liquidaciones, l)
+	}
+
+	return liquidaciones, nil
+}
