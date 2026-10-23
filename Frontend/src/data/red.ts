@@ -13,44 +13,6 @@ export const TASA_COMISION: Record<number, number> = {
 };
 
 
-export const redInicial: Referido = {
-  id: 0,
-  nombre: "Tú",
-  nivel: 0,
-  ventas: 2400,
-  hijos: [
-    {
-      id: 1,
-      nombre: "Ana García",
-      nivel: 1,
-      ventas: 1200,
-      hijos: [
-        {
-          id: 4,
-          nombre: "Carlos Ruiz",
-          nivel: 2,
-          ventas: 500,
-          hijos: [
-            { id: 7, nombre: "Diana Paz", nivel: 3, ventas: 300 },
-          ],
-        },
-        { id: 5, nombre: "Sofía León", nivel: 2, ventas: 430 },
-      ],
-    },
-    {
-      id: 2,
-      nombre: "Luis Poveda",
-      nivel: 1,
-      ventas: 850,
-      hijos: [
-        { id: 6, nombre: "Marco Díaz", nivel: 2, ventas: 380 },
-      ],
-    },
-    { id: 3, nombre: "Marta Sánchez", nivel: 1, ventas: 430 },
-  ],
-};
-
-
 export const contarRed = (raiz: Referido): number => {
   const directos = raiz.hijos ?? [];
   return directos.reduce((total, hijos) => total + 1 + contarRed(hijos), 0);
