@@ -176,7 +176,7 @@ const Storefront = () => {
           Comienza tu propia red hoy
         </h2>
         <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-          Únete a MultiCatálogo y transforma tu red de contactos en un negocio
+          Únete a YMRT y transforma tu red de contactos en un negocio
           de cosméticos premium.
         </p>
         <Link

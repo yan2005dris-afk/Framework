@@ -67,7 +67,7 @@ export function PwaFloatingButton() {
                 <Smartphone className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-lg">Instalar MultiCatálogo</h3>
+                <h3 className="font-bold text-slate-900 text-lg">Instalar YMRT</h3>
                 <p className="text-xs text-slate-500">Acceso rápido, modo sin conexión y experiencia nativa</p>
               </div>
             </div>
