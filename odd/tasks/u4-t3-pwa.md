@@ -64,19 +64,29 @@ worker corre sin depender de U4-T2. (checklist, Fase 4)
 
 - T1 (S1-S2-S3) Instalar `vite-plugin-pwa` y `workbox-window`, generar los
   iconos 192 y 512 desde `public/favicon.svg`, escribir el manifest y los meta
-  tags. Route: inline.
+  tags. Route: inline. Commit: `925c48f`.
 - T2 (S5-S6) `registerSW` en `main.tsx` y banner de actualizacion con `sonner`,
-  que ya esta en el proyecto. Route: inline.
+  que ya esta en el proyecto. Route: inline. Commit: `925c48f`.
 - T3 (S4) `runtimeCaching` de Workbox con las estrategias de S4. Route: inline.
+  Commit: `925c48f`.
 - T4 (S7-S8) Ruta `/offline`, componente `Offline` con boton de reintentar, y
-  hook `useOnlineStatus`. Route: inline.
+  hook `useOnlineStatus`. Route: inline. Commit: `925c48f`.
 - T5 (S10) Migracion `006_idempotencia.sql` y soporte de la key en
   `CrearPedido` + test que demuestra que dos POST con la misma key dejan un solo
-  pedido. Route: inline.
+  pedido. Route: inline. Commit: `c082711`.
 - T6 (S9) Cliente HTTP con reintento al volver la conexion, generando y
   reutilizando la `Idempotency-Key` del mismo intento de checkout. Route: inline.
+  Commit: `3ff3325`.
 - T7 (S11) Verificar con chromium que la app es instalable y funciona offline,
   y actualizar `docs/REQUIREMENTS_CHECKLIST.md`. Route: inline.
+
+Commits fuera de la lista de tareas, encontrados durante T5:
+
+- `2b5343d` fix P0 del gateway (ver L7). Va antes que la idempotencia a proposito:
+  sin el, el checkout por el proxy no funcionaba y no habia nada que reintentar.
+
+Los cuatro de la Fase 1 a 4 van en un solo commit (`925c48f`) porque separarlos
+deja la app en un estado que no se puede instalar ni probar.
 
 ## Delivery strategy
 
@@ -109,3 +119,32 @@ L6. `crearPedido` del Backend ya es una transaccion ACID con rollback
     (`Backend/repository/repository.go:199`). La idempotencia entra ahi adentro,
     no alrededor: es lo que hace que dos POST concurrentes con la misma key no
     puedan crear dos pedidos.
+L7. **Bug preexistente del gateway, encontrado al probar T5**: todo POST autenticado con body a
+    traves del gateway devolvia 502. No era culpa de la idempotencia ni del rate_limit: el
+    `forward_auth` reenvia el `Content-Length` del request original al auth-service, que
+    respondia sin consumir ese body; el servidor HTTP cortaba la conexion a medias, Caddy
+    marcaba el transporte como roto y el body quedaba vacio para el `reverse_proxy` que
+    venia despues (`http: ContentLength=159 with Body length 0`). O sea, el checkout nunca
+    funciono por el proxy. Fix: `_ = c.Body()` al inicio de `AuthHandler.Validate`. El test
+    de integracion `TestCheckoutIdempotencyMismoKeyUnSoloPedido` es el test de regresion: da
+    502 sin el fix y 201/200 con el.
+L8. T3 fijo un bug de performance que no era de la PWA pero la volvia inviable: `Icon.tsx`
+    usaba `DynamicIcon` de `lucide-react/dynamic` y arrastraba ~1900 iconos como chunks
+    sueltos. El service worker los precacheaba todos: 1938 entradas. Con el mapa estatico
+    quedaron 34.
+L9. La eleccion de reintento con idempotency key (L2) obligo a tocar el Backend, y al hacerlo
+    aparecio el bug de L7. Sin el fix del gateway, S9 y S10 habrian quedado "verificados" contra
+    una ruta que en produccion devolvia 502: los tests de integracion se corrieron contra el
+    gateway justamente para no cair en eso.
+L10. **Regresion mia, encontrada al intentar correr Lighthouse**: la app no renderizaba, el
+    `<body>` llegaba vacio y la consola tiraba `Cannot read properties of null (reading 'stores')`.
+    La causa es `OfflineGuard`, que se monta en `AppShell` al lado del `RouterProvider` pero FUERA
+    de el, y usaba `useRouter()`/`useRouterState()`: esos hooks leen el contexto del router, que
+    en ese punto todavia no existe. `pnpm lint` y `pnpm build` pasan igual, asi que el tipo no lo
+    detecta: el fallo es de orden de montaje.
+    Se aislo compilando el commit previo (b0c646b) en un worktree: ese renderiza bien, asi que
+    la regresion es de U4-T3 y no del shell. El fix es usar el `router` como singleton en vez de
+    los hooks.
+    Dos lecciones: (1) `pnpm build` en verde NO significa que la app arranque, hace falta abrirla
+    en un navegador; (2) el audit de Lighthouse es lo que lo delato, porque NO_FCP es
+    precisamente "la pagina no pinto nada".
