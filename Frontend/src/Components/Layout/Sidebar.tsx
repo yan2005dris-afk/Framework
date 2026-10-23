@@ -25,7 +25,7 @@ interface NavItem {
 }
 
 /** Rutas del layout protegido. El union mantiene `to={item.path}` tipado por TanStack Router. */
-type NavPath = "/" | "/tienda" | "/catalogo" | "/mi-red" | "/carrito";
+type NavPath = "/" | "/tienda" | "/catalogo" | "/mi-red" | "/carrito" | "/saas";
 
 interface SidebarProps {
   /** Riel angosto (solo iconos) vs panel completo. Afecta solo a escritorio. */
@@ -45,6 +45,7 @@ interface SidebarContentProps {
 
 const navItems: NavItem[] = [
   { name: "Dashboard", path: "/", icon: "layout-dashboard", soloAdmin: true },
+  { name: "Panel SaaS", path: "/saas", icon: "shield", soloAdmin: true },
   { name: "Tienda", path: "/tienda", icon: "shopping-bag" },
   { name: "Catálogo", path: "/catalogo", icon: "store" },
   { name: "Mi Red", path: "/mi-red", icon: "users", soloAdmin: true },

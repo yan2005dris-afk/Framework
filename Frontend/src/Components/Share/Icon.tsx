@@ -8,6 +8,7 @@ import {
   ShoppingCart,
   Store,
   Users,
+  Shield,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -35,6 +36,7 @@ const iconos = {
   "shopping-cart": ShoppingCart,
   store: Store,
   users: Users,
+  shield: Shield,
   x: X,
 } satisfies Record<string, LucideIcon>;
 
