@@ -4,7 +4,6 @@ import { useAuth } from "../../../Context/useAuth";
 import type { Rol } from "../../../Context/auth-types";
 import { api } from "../../../services/api";
 import { router } from "@/router";
-import { PwaInstallPrompt } from "@/Components/Pwa/PwaInstallPrompt";
 
 /**
  * Componente de inicio de sesión con soporte para roles y redirección según perfil.
@@ -110,8 +109,6 @@ const Login = () => {
             {loading ? "Validando..." : "Iniciar Sesión"}
           </button>
         </form>
-
-        <PwaInstallPrompt />
 
         <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1">
           <p className="font-semibold text-slate-700">Cuentas de prueba:</p>
