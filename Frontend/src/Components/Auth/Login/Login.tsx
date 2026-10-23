@@ -5,6 +5,7 @@ import { useAuth } from "../../../Context/useAuth";
 import type { Rol } from "../../../Context/auth-types";
 import { api } from "../../../services/api";
 import { usePwaInstall } from "../../../hooks/usePwaInstall";
+import { router } from "@/router";
 
 /**
  * Componente de inicio de sesión con soporte para roles y redirección según perfil.
@@ -30,8 +31,21 @@ const Login = () => {
       // email y rol para hidratar UI. El token nunca sale del backend.
       login({ email: data.email, rol });
 
+      // Actualizar explícitamente el contexto del router antes de navegar.
+      // Sin esto, el beforeLoad de /_auth sigue leyendo isAuthenticated: false
+      // en el primer clic y rebota al usuario a /login.
+      router.update({
+        context: {
+          auth: {
+            user: { email: data.email, rol },
+            isAuthenticated: true,
+            loading: false,
+          },
+        },
+      });
+
       // Redirigir según el rol del usuario
-      navigate({ to: rol === "admin" ? "/" : "/tienda" });
+      await navigate({ to: rol === "admin" ? "/" : "/tienda" });
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
