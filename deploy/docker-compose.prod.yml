@@ -177,6 +177,23 @@ services:
       - internal
 
   # ============================================================================
+  # CLOUDFLARE TUNNEL (Opcional)
+  # ============================================================================
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: multicatalogo-cloudflared
+    restart: always
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # ============================================================================
   # AUTOMATIZACIÓN DE DESPLIEGUE CONTINUO (WATCHTOWER)
   # ============================================================================
 
@@ -189,6 +206,7 @@ services:
       # Monta la configuración de docker del host donde se ejecutó 'docker login ghcr.io'
       - ${DOCKER_CONFIG_PATH:-/home/uadmin/.docker/config.json}:/config.json:ro
     environment:
+      - DOCKER_API_VERSION=1.44
       - WATCHTOWER_CLEANUP=${WATCHTOWER_CLEANUP:-true}
       - WATCHTOWER_POLL_INTERVAL=${WATCHTOWER_POLL_INTERVAL:-300}
       - WATCHTOWER_INCLUDE_STOPPED=false
