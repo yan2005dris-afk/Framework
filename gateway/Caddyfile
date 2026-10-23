@@ -41,6 +41,42 @@
     # health, despues el auth, despues el proxying.
     route {
 
+        # --- Rate limiting (#21) ------------------------------------------------
+        # Va primero: un request bloqueado no deberia llegar ni al auth-service
+        # ni al upstream.
+        #
+        # Dos zonas con proposito distinto:
+        #   - login: frena fuerza bruta de credenciales. Es el endpoint mas
+        #     caro (bcrypt) y el mas atacable.
+        #   - api:   techo general de abuso sobre /api/*.
+        #
+        # La clave es {remote_host} (IP del cliente, sin confiar en
+        # X-Forwarded-For, que el cliente puede falsificar).
+        #
+        # Solo se limita /api/*: el health del gateway y los assets del SPA
+        # quedan fuera, para que un 429 de la API no rompa la carga de la app.
+        @login_limited {
+            path /api/login
+        }
+        rate_limit @login_limited {
+            zone login {
+                key {remote_host}
+                events 10
+                window 1m
+            }
+        }
+
+        @api_limited {
+            path /api/*
+        }
+        rate_limit @api_limited {
+            zone api {
+                key {remote_host}
+                events 300
+                window 1m
+            }
+        }
+
         # --- Health del propio gateway ------------------------------------------
         # Sin auth, para el HEALTHCHECK del Dockerfile. Responde 200 mientras
         # Caddy este vivo; no toca los upstreams (para eso estan sus healthchecks).

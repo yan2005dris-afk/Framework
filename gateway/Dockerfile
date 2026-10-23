@@ -1,9 +1,10 @@
 # Dockerfile del gateway (Caddy 2.x) con el build del SPA dentro de la imagen.
 #
-# Dos stages:
+# Tres stages:
 #   1. `frontend`: node + pnpm compila Frontend/ y produce `dist/`.
-#   2. `caddy`   : imagen final, con ese `dist/` en /srv/frontend, que es la
-#                  raiz que declara el Caddyfile.
+#   2. `caddy`   : xcaddy compila Caddy con el plugin de rate limit.
+#   3. runtime   : imagen final con ese binario, ese `dist/` en /srv/frontend
+#                  (la raiz que declara el Caddyfile) y el Caddyfile.
 #
 # El resultado es que el unico puerto publico del stack es :8080: el SPA y la
 # API comparten origen, que es lo que hace funcionar la cookie httpOnly
@@ -12,11 +13,6 @@
 # El stage de build necesita Frontend/ y pnpm-lock.yaml, que viven FUERA de
 # este directorio. Por eso docker-compose.yml usa `context: .` (raiz del repo)
 # con `dockerfile: gateway/Dockerfile`, y por eso la raiz tiene .dockerignore.
-#
-# Para personalizar modulos (e.g. caddy-jwt) usariamos caddy:2-builder
-# con 'xcaddy build' + 'COPY --from=builder /build/caddy /usr/bin/caddy'.
-# En este PR no agregamos modulos: el forward_auth cubre la validacion
-# central via el auth-service.
 
 # --- Stage 1: build del SPA ----------------------------------------------------
 # Node 22 + pnpm 9 son los que fija .github/workflows/ci.yml. bookworm (glibc)
@@ -42,8 +38,23 @@ RUN pnpm install --frozen-lockfile
 COPY Frontend/ ./
 RUN pnpm build
 
-# --- Stage 2: runtime con Caddy ------------------------------------------------
+# --- Stage 2: build de Caddy con modulos --------------------------------------
+# El rate limiting (#21) es un plugin, no viene en la imagen oficial de Caddy.
+# `caddy:2-builder` trae xcaddy y las toolchains para compilarlo. El binario
+# resultante reemplaza al de la imagen base en el stage final.
+#
+# La version del plugin va fija: sin pin, un `docker compose build` de mañana
+# podria traer otro codigo y el rate limit cambiaria sin que nadie lo note.
+FROM caddy:2-builder AS caddy
+
+RUN xcaddy build \
+    --with github.com/mholt/caddy-ratelimit@v0.1.0
+
+# --- Stage 3: runtime con Caddy ------------------------------------------------
 FROM caddy:2
+
+# Caddy con el plugin de rate limit compilado.
+COPY --from=caddy /usr/bin/caddy /usr/bin/caddy
 
 # Copiamos el Caddyfile en la ruta default que Caddy lee si existe.
 # Tambien soportamos /etc/caddy/Caddyfile para volumenes custom.
