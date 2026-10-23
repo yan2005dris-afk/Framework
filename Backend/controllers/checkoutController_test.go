@@ -66,6 +66,10 @@ func (m *MockDatabaseRepository) ObtenerComisionesPorReferido(int) (*models.Resu
 func (m *MockDatabaseRepository) LiquidarComisiones(int) (*models.Liquidacion, error) { return nil, nil }
 func (m *MockDatabaseRepository) ListarLiquidaciones() ([]models.Liquidacion, error) { return nil, nil }
 func (m *MockDatabaseRepository) ListarLiquidacionesPorReferido(int) ([]models.Liquidacion, error) { return nil, nil }
+func (m *MockDatabaseRepository) ListarPedidosMios(int, int, int) ([]models.Pedido, error) { return nil, nil }
+func (m *MockDatabaseRepository) ListarPedidosAdmin(string, int, int) ([]models.Pedido, error) { return nil, nil }
+func (m *MockDatabaseRepository) ObtenerPedidoDetalle(int) (*models.PedidoConDetalle, error) { return nil, nil }
+func (m *MockDatabaseRepository) ActualizarEstadoPedido(int, string) error { return nil }
 
 // MockCacheRepository simula las operaciones de Redis.
 type MockCacheRepository struct {
