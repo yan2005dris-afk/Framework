@@ -47,9 +47,10 @@ func SetupRoutes(
 	api.Put("/productos/:id", requireAuth, prodCtrl.ActualizarProducto)
 	api.Delete("/productos/:id", requireAuth, prodCtrl.EliminarProducto)
 
-	// Autenticación (pública)
+	// Autenticación y Registro (públicos)
 	api.Post("/login", authCtrl.Login)
 	api.Post("/logout", authCtrl.Logout)
+	api.Post("/register", authCtrl.Register)
 
 	// Hidratación de sesión desde cookie httpOnly (protegido).
 	// El frontend lo llama al montar la app para saber si hay sesión activa
@@ -89,7 +90,7 @@ func SetupDefaultRoutes(app *fiber.App) {
 
 	// Tests sin auth-service: el proxy devuelve 502 BadGateway porque no hay
 	// URL arriba; suficiente para validar que el handler existe y responde.
-	authCtrl := controllers.NewAuthController("http://127.0.0.1:1")
+	authCtrl := controllers.NewAuthController("http://127.0.0.1:1", dbRepo, "dev")
 	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo, "dev")
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo, "dev")
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, "dev")

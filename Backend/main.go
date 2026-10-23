@@ -69,7 +69,7 @@ func main() {
 	}
 
 	// Instanciación de controladores con dependencias inyectadas
-	authCtrl := controllers.NewAuthController(authServiceURL)
+	authCtrl := controllers.NewAuthController(authServiceURL, dbRepo, appEnv)
 	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo, appEnv)
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo, appEnv)
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, appEnv)

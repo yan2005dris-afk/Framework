@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -1262,4 +1263,76 @@ func (r *PostgresRepository) ObtenerComisionesPendientes() ([]models.DeudaDistri
 	}
 
 	return deudas, nil
+}
+
+// RegistrarUsuario registra un nuevo usuario en auth.users y su nodo en referidos de forma transaccional.
+func (r *PostgresRepository) RegistrarUsuario(req models.RegisterRequest, hashedPassword string) (*models.Usuario, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error al iniciar transacción: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Validar que el email no exista ya
+	var existe int
+	_ = tx.QueryRow(ctx, `SELECT 1 FROM auth.users WHERE email = $1`, req.Email).Scan(&existe)
+	if existe == 1 {
+		return nil, errors.New("email ya registrado")
+	}
+
+	// 2. Determinar referente padre si se envió código de referido
+	var parentID *int
+	if req.Ref != "" {
+		var pid int
+		err := tx.QueryRow(ctx, `SELECT id FROM referidos WHERE UPPER(codigo) = UPPER($1)`, req.Ref).Scan(&pid)
+		if err != nil {
+			return nil, errors.New("código de referido inválido")
+		}
+		parentID = &pid
+	} else {
+		// Por defecto, cuelga del nodo raíz 0 ("Tú")
+		defaultParent := 0
+		parentID = &defaultParent
+	}
+
+	// 3. Insertar usuario en auth.users
+	var usuario models.Usuario
+	err = tx.QueryRow(ctx, `
+		INSERT INTO auth.users (email, password, rol, created_at, updated_at)
+		VALUES ($1, $2, 'cliente', NOW(), NOW())
+		RETURNING id, email, rol
+	`, req.Email, hashedPassword).Scan(&usuario.ID, &usuario.Email, &usuario.Rol)
+	if err != nil {
+		return nil, fmt.Errorf("error al registrar usuario: %w", err)
+	}
+
+	// 4. Crear el nodo del nuevo usuario en referidos
+	codigoAuto := strings.ToUpper(strings.Split(req.Email, "@")[0])
+	_, err = tx.Exec(ctx, `
+		INSERT INTO referidos (id, nombre, nivel, ventas, parent_id, codigo)
+		VALUES ($1, $2, 1, 0, $3, $4)
+		ON CONFLICT (id) DO NOTHING
+	`, usuario.ID, req.Nombre, parentID, codigoAuto)
+	if err != nil {
+		// Si colisiona el id o código, intentar con sufijo numérico
+		_, _ = tx.Exec(ctx, `
+			INSERT INTO referidos (id, nombre, nivel, ventas, parent_id, codigo)
+			VALUES ($1, $2, 1, 0, $3, $4)
+			ON CONFLICT (id) DO NOTHING
+		`, usuario.ID, req.Nombre, parentID, fmt.Sprintf("%s%d", codigoAuto, usuario.ID))
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("error al confirmar registro: %w", err)
+	}
+
+	return &usuario, nil
 }

@@ -23,6 +23,7 @@ type stubDBRepo struct {
 	knownID    int
 }
 
+func (s *stubDBRepo) RegistrarUsuario(req models.RegisterRequest, pwd string) (*models.Usuario, error) { return nil, nil }
 func (s *stubDBRepo) BuscarUsuarioPorEmail(email string) (*models.Usuario, error) {
 	if email == s.knownEmail {
 		return &models.Usuario{ID: s.knownID, Email: email, Rol: "admin"}, nil
