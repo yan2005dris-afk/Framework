@@ -625,9 +625,12 @@ func (r *PostgresRepository) LiquidarComisiones(referidoID int) (*models.Liquida
 	var totalPendiente float64
 	err = tx.QueryRow(ctx, `
 		SELECT COALESCE(SUM(monto), 0)
-		FROM comisiones
-		WHERE referido_id = $1 AND estado = 'pendiente'
-		FOR UPDATE
+		FROM (
+			SELECT monto
+			FROM comisiones
+			WHERE referido_id = $1 AND estado = 'pendiente'
+			FOR UPDATE
+		) sub
 	`, referidoID).Scan(&totalPendiente)
 	if err != nil {
 		return nil, fmt.Errorf("error al calcular monto a liquidar: %w", err)
