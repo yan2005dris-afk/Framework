@@ -201,3 +201,35 @@ type PedidoConDetalle struct {
 type ActualizarEstadoPedidoRequest struct {
 	Estado string `json:"estado"`
 }
+
+// ReporteResumen resume los KPIs de ventas del negocio para el dashboard.
+type ReporteResumen struct {
+	TotalVendido         float64 `json:"totalVendido"`
+	NumeroPedidos        int     `json:"numeroPedidos"`
+	TicketPromedio       float64 `json:"ticketPromedio"`
+	ComisionesDevengadas float64 `json:"comisionesDevengadas"`
+}
+
+// TopProducto representa un producto destacado por volumen de venta.
+type TopProducto struct {
+	ProductoID  int     `json:"productoId"`
+	Nombre      string  `json:"nombre"`
+	TotalVentas float64 `json:"totalVentas"`
+	Cantidad    int     `json:"cantidad"`
+}
+
+// TopReferido representa un distribuidor con mayor volumen de ventas en su red.
+type TopReferido struct {
+	ReferidoID int     `json:"referidoId"`
+	Nombre     string  `json:"nombre"`
+	Nivel      int     `json:"nivel"`
+	Ventas     float64 `json:"ventas"`
+}
+
+// DeudaDistribuidor representa el saldo de comisiones pendientes por pagar a un distribuidor.
+type DeudaDistribuidor struct {
+	ReferidoID      int     `json:"referidoId"`
+	Nombre          string  `json:"nombre"`
+	TotalPendiente  float64 `json:"totalPendiente"`
+	NumeroComisiones int    `json:"numeroComisiones"`
+}

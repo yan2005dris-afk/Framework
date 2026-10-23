@@ -1095,3 +1095,171 @@ func (r *PostgresRepository) ActualizarEstadoPedido(id int, nuevoEstado string) 
 
 	return nil
 }
+
+// ObtenerReporteResumen calcula los KPIs globales (ventas, pedidos, ticket medio y comisiones) con rango de fechas.
+func (r *PostgresRepository) ObtenerReporteResumen(desde, hasta string) (*models.ReporteResumen, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var totalVendido float64
+	var numPedidos int
+
+	// Consulta de ventas y pedidos excluyendo cancelados
+	err = pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(total), 0), COUNT(id)
+		FROM pedidos
+		WHERE estado != 'cancelado'
+		  AND ($1 = '' OR creado_at >= $1::timestamp)
+		  AND ($2 = '' OR creado_at <= $2::timestamp)
+	`, desde, hasta).Scan(&totalVendido, &numPedidos)
+	if err != nil {
+		return nil, fmt.Errorf("error al calcular resumen de pedidos: %w", err)
+	}
+
+	ticketPromedio := 0.0
+	if numPedidos > 0 {
+		ticketPromedio = totalVendido / float64(numPedidos)
+	}
+
+	// Consulta de comisiones devengadas en el periodo
+	var comisionesDevengadas float64
+	err = pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(monto), 0)
+		FROM comisiones
+		WHERE estado != 'revertida'
+		  AND ($1 = '' OR creado_en >= $1::timestamp)
+		  AND ($2 = '' OR creado_en <= $2::timestamp)
+	`, desde, hasta).Scan(&comisionesDevengadas)
+	if err != nil {
+		return nil, fmt.Errorf("error al calcular comisiones devengadas: %w", err)
+	}
+
+	return &models.ReporteResumen{
+		TotalVendido:         totalVendido,
+		NumeroPedidos:        numPedidos,
+		TicketPromedio:       ticketPromedio,
+		ComisionesDevengadas: comisionesDevengadas,
+	}, nil
+}
+
+// ObtenerTopProductos devuelve los productos más vendidos agrupados por volumen monetario y cantidad.
+func (r *PostgresRepository) ObtenerTopProductos(limit int) ([]models.TopProducto, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if limit <= 0 {
+		limit = 5
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT pi.producto_id, COALESCE(pr.nombre, 'Producto'), 
+		       COALESCE(SUM(pi.subtotal), 0) as total_ventas,
+		       COALESCE(SUM(pi.cantidad), 0) as cantidad_total
+		FROM pedido_items pi
+		JOIN pedidos p ON pi.pedido_id = p.id
+		LEFT JOIN productos pr ON pi.producto_id = pr.id
+		WHERE p.estado != 'cancelado'
+		GROUP BY pi.producto_id, pr.nombre
+		ORDER BY total_ventas DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar top productos: %w", err)
+	}
+	defer rows.Close()
+
+	top := make([]models.TopProducto, 0)
+	for rows.Next() {
+		var item models.TopProducto
+		if err := rows.Scan(&item.ProductoID, &item.Nombre, &item.TotalVentas, &item.Cantidad); err != nil {
+			return nil, err
+		}
+		top = append(top, item)
+	}
+
+	return top, nil
+}
+
+// ObtenerTopReferidos devuelve los distribuidores con más ventas consolidadas en la red.
+func (r *PostgresRepository) ObtenerTopReferidos(limit int) ([]models.TopReferido, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if limit <= 0 {
+		limit = 10
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT id, nombre, nivel, ventas
+		FROM referidos
+		ORDER BY ventas DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar top referidos: %w", err)
+	}
+	defer rows.Close()
+
+	top := make([]models.TopReferido, 0)
+	for rows.Next() {
+		var item models.TopReferido
+		if err := rows.Scan(&item.ReferidoID, &item.Nombre, &item.Nivel, &item.Ventas); err != nil {
+			return nil, err
+		}
+		top = append(top, item)
+	}
+
+	return top, nil
+}
+
+// ObtenerComisionesPendientes totaliza la deuda pendiente agrupada por distribuidor.
+func (r *PostgresRepository) ObtenerComisionesPendientes() ([]models.DeudaDistribuidor, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, err := pool.Query(ctx, `
+		SELECT c.referido_id, COALESCE(rf.nombre, 'Distribuidor ' || c.referido_id),
+		       COALESCE(SUM(c.monto), 0) as deuda_total,
+		       COUNT(c.id) as cantidad_comisiones
+		FROM comisiones c
+		LEFT JOIN referidos rf ON c.referido_id = rf.id
+		WHERE c.estado = 'pendiente'
+		GROUP BY c.referido_id, rf.nombre
+		ORDER BY deuda_total DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar comisiones pendientes: %w", err)
+	}
+	defer rows.Close()
+
+	deudas := make([]models.DeudaDistribuidor, 0)
+	for rows.Next() {
+		var item models.DeudaDistribuidor
+		if err := rows.Scan(&item.ReferidoID, &item.Nombre, &item.TotalPendiente, &item.NumeroComisiones); err != nil {
+			return nil, err
+		}
+		deudas = append(deudas, item)
+	}
+
+	return deudas, nil
+}

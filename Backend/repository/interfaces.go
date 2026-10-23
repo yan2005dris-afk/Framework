@@ -30,6 +30,12 @@ type DatabaseRepository interface {
 	LiquidarComisiones(referidoID int) (*models.Liquidacion, error)
 	ListarLiquidaciones() ([]models.Liquidacion, error)
 	ListarLiquidacionesPorReferido(referidoID int) ([]models.Liquidacion, error)
+
+	// Métodos de Reportes y KPIs (Fase 6)
+	ObtenerReporteResumen(desde, hasta string) (*models.ReporteResumen, error)
+	ObtenerTopProductos(limit int) ([]models.TopProducto, error)
+	ObtenerTopReferidos(limit int) ([]models.TopReferido, error)
+	ObtenerComisionesPendientes() ([]models.DeudaDistribuidor, error)
 }
 
 // CacheRepository define los métodos requeridos para interactuar con la capa de caché en memoria.
