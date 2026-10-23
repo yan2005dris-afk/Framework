@@ -129,7 +129,17 @@
 
         forward_auth @protected auth-service:3001 {
             uri /auth/validate
-            method POST
+            # GET, y no POST, a proposito. Caddy construye el subrequest de
+            # forward_auth con los headers del request original, incluido su
+            # Content-Length; con POST eso consume el body original y el
+            # reverse_proxy que viene despues se queda sin cuerpo. El sintoma
+            # era un 502 "http: ContentLength=N with Body length 0" en TODOS
+            # los POST autenticados con body (el checkout entre ellos), y no se
+            # veía desde el gateway: el backend directo respondia 201.
+            #
+            # /auth/validate no lee el body (solo mira el token), asi que un
+            # GET pierde nada y deja el body intacto para el upstream.
+            method GET
             copy_headers X-User-Id X-User-Email X-User-Rol X-Tenant-Id X-Rol-Saas
             # Caddy propaga Authorization + Cookie por defecto, asi que el
             # auth-service recibe el token del cliente sin header_up explicito.

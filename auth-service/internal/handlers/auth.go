@@ -132,6 +132,16 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 //
 // Si invalido/ausente, responde 401.
 func (h *AuthHandler) Validate(c *fiber.Ctx) error {
+	// El gateway hace `forward_auth`. Con `method GET` el subrequest no lleva
+	// body, asi que esta defensa es de profundidad: si alguien vuelve a
+	// invocar /auth/validate con POST y un body, este handler lo consume antes
+	// de responder. Un servidor HTTP que responde sin terminar de leer el body
+	// corta la conexion a medias, Caddy marca el transporte como roto y el
+	// reverse_proxy que viene despues se queda sin cuerpo.
+	// `c.Body()` devuelve el contenido cacheado del request y lo lee si hacia
+	// falta, que es justo lo que importa.
+	_ = c.Body()
+
 	token := extractToken(c)
 	if token == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Token ausente"})
