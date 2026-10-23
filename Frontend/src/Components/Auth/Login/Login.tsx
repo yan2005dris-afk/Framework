@@ -110,6 +110,16 @@ const Login = () => {
           </button>
         </form>
 
+        <div className="mt-4 text-center text-sm text-slate-600">
+          ¿No tienes una cuenta aún?{" "}
+          <span
+            onClick={() => navigate({ to: "/registro" })}
+            className="text-indigo-600 font-semibold hover:underline cursor-pointer"
+          >
+            Crear cuenta aquí
+          </span>
+        </div>
+
         <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1">
           <p className="font-semibold text-slate-700">Cuentas de prueba:</p>
           <p>

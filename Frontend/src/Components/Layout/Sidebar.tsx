@@ -24,6 +24,9 @@ export type NavPath =
   | "/catalogo"
   | "/mi-red"
   | "/carrito"
+  | "/mis-pedidos"
+  | "/admin/productos"
+  | "/admin/pedidos"
   | "/saas"
   | "/planes"
   | "/usuarios-saas";
@@ -56,6 +59,8 @@ interface SidebarContentProps {
 
 const navMenu: NavGroupItem[] = [
   { name: "Dashboard", path: "/", icon: "layout-dashboard", soloAdmin: true },
+  { name: "Gestión Productos", path: "/admin/productos", icon: "store", soloAdmin: true },
+  { name: "Gestión Pedidos", path: "/admin/pedidos", icon: "credit-card", soloAdmin: true },
   {
     name: "Panel SaaS",
     icon: "shield",
@@ -68,6 +73,7 @@ const navMenu: NavGroupItem[] = [
   },
   { name: "Tienda", path: "/tienda", icon: "shopping-bag" },
   { name: "Catálogo", path: "/catalogo", icon: "store" },
+  { name: "Mis Pedidos", path: "/mis-pedidos", icon: "credit-card" },
   { name: "Mi Red MLM", path: "/mi-red", icon: "users", soloAdmin: true },
   { name: "Carrito", path: "/carrito", icon: "shopping-cart" },
 ];
@@ -104,7 +110,10 @@ const SidebarContent = ({
             <span className="truncate text-lg font-bold tracking-tight">
               MultiCatálogo
             </span>
-          )}
+          ) && (
+              <span className="flex-col"> Yandris Riviera</span>
+            )
+          }
         </div>
 
         {onClose && (
