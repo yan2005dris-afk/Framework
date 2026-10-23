@@ -1,11 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Download } from "lucide-react";
 import { useAuth } from "../../../Context/useAuth";
 import type { Rol } from "../../../Context/auth-types";
 import { api } from "../../../services/api";
-import { usePwaInstall } from "../../../hooks/usePwaInstall";
 import { router } from "@/router";
+import { PwaInstallPrompt } from "@/Components/Pwa/PwaInstallPrompt";
 
 /**
  * Componente de inicio de sesión con soporte para roles y redirección según perfil.
@@ -17,7 +16,6 @@ const Login = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const navigate = useNavigate();
   const { login } = useAuth();
-  const { isInstallable, promptInstall } = usePwaInstall();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -111,18 +109,9 @@ const Login = () => {
           >
             {loading ? "Validando..." : "Iniciar Sesión"}
           </button>
-
-          {isInstallable && (
-            <button
-              type="button"
-              onClick={() => void promptInstall()}
-              className="w-full min-h-[44px] bg-white text-indigo-600 border-2 border-indigo-600 font-semibold py-3 rounded-lg hover:bg-indigo-50 transition flex items-center justify-center gap-2 shadow-sm"
-            >
-              <Download className="w-5 h-5" />
-              <span>Instalar Aplicación (PWA)</span>
-            </button>
-          )}
         </form>
+
+        <PwaInstallPrompt />
 
         <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1">
           <p className="font-semibold text-slate-700">Cuentas de prueba:</p>
