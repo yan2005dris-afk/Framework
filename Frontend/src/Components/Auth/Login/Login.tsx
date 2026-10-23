@@ -3,6 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "../../../Context/useAuth";
 import type { Rol } from "../../../Context/auth-types";
 import { api } from "../../../services/api";
+import { router } from "@/router";
+import { PwaInstallPrompt } from "@/Components/Pwa/PwaInstallPrompt";
 
 /**
  * Componente de inicio de sesión con soporte para roles y redirección según perfil.
@@ -27,8 +29,21 @@ const Login = () => {
       // email y rol para hidratar UI. El token nunca sale del backend.
       login({ email: data.email, rol });
 
+      // Actualizar explícitamente el contexto del router antes de navegar.
+      // Sin esto, el beforeLoad de /_auth sigue leyendo isAuthenticated: false
+      // en el primer clic y rebota al usuario a /login.
+      router.update({
+        context: {
+          auth: {
+            user: { email: data.email, rol },
+            isAuthenticated: true,
+            loading: false,
+          },
+        },
+      });
+
       // Redirigir según el rol del usuario
-      navigate({ to: rol === "admin" ? "/" : "/tienda" });
+      await navigate({ to: rol === "admin" ? "/" : "/tienda" });
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -95,6 +110,8 @@ const Login = () => {
             {loading ? "Validando..." : "Iniciar Sesión"}
           </button>
         </form>
+
+        <PwaInstallPrompt />
 
         <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-1">
           <p className="font-semibold text-slate-700">Cuentas de prueba:</p>
