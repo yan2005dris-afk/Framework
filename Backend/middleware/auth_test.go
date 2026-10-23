@@ -39,6 +39,11 @@ func (s *stubDBRepo) CrearPedido(int, models.CheckoutRequest, string) (*models.P
 	return nil, false, nil
 }
 func (s *stubDBRepo) ActualizarComisiones(int, float64) error { return nil }
+func (s *stubDBRepo) RegistrarComisionesPedido(int, int, float64) ([]models.Comision, error) { return nil, nil }
+func (s *stubDBRepo) ObtenerComisionesPorReferido(int) (*models.ResumenComisiones, error) { return nil, nil }
+func (s *stubDBRepo) LiquidarComisiones(int) (*models.Liquidacion, error) { return nil, nil }
+func (s *stubDBRepo) ListarLiquidaciones() ([]models.Liquidacion, error) { return nil, nil }
+func (s *stubDBRepo) ListarLiquidacionesPorReferido(int) ([]models.Liquidacion, error) { return nil, nil }
 
 func signToken(t *testing.T, secret []byte, email, rol string, expiresAt time.Time) string {
 	t.Helper()

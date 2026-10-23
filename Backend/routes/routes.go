@@ -17,6 +17,7 @@ func SetupRoutes(
 	redCtrl *controllers.RedController,
 	checkoutCtrl *controllers.CheckoutController,
 	healthCtrl *controllers.HealthController,
+	liqCtrl *controllers.LiquidacionController,
 	dbRepo repository.DatabaseRepository,
 	jwtSecret string,
 ) {
@@ -52,6 +53,12 @@ func SetupRoutes(
 
 	// Checkout / Transacciones ACID (protegido)
 	api.Post("/checkout", requireAuth, checkoutCtrl.Checkout)
+
+	// Ledger de Comisiones y Liquidaciones (Fase 4 y Fase 5)
+	api.Get("/comisiones/mias", requireAuth, liqCtrl.ObtenerComisionesMias)
+	api.Get("/liquidaciones/mias", requireAuth, liqCtrl.ListarLiquidacionesMias)
+	api.Get("/liquidaciones", requireAuth, liqCtrl.ListarLiquidaciones)
+	api.Post("/liquidaciones", requireAuth, liqCtrl.Liquidar)
 }
 
 // SetupDefaultRoutes permite inicializar rutas instanciando los repositorios y controllers
@@ -67,6 +74,7 @@ func SetupDefaultRoutes(app *fiber.App) {
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo, "dev")
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, "dev")
 	healthCtrl := controllers.NewHealthController(nil, nil)
+	liqCtrl := controllers.NewLiquidacionController(dbRepo, "dev")
 
-	SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl, healthCtrl, dbRepo, "dev-secret")
+	SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl, healthCtrl, liqCtrl, dbRepo, "dev-secret")
 }
