@@ -1,3 +1,36 @@
+export interface PedidoItemDetalleDTO {
+  id: number;
+  pedidoId: number;
+  productoId: number;
+  nombreProducto: string;
+  imgProducto: string;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+}
+
+export interface PedidoDTO {
+  id: number;
+  usuarioId: number;
+  nombreCliente: string;
+  emailCliente: string;
+  metodoPago: string;
+  total: number;
+  estado: string;
+  creadoAt: string;
+}
+
+export interface PedidoConDetalleDTO extends PedidoDTO {
+  items: PedidoItemDetalleDTO[];
+}
+
+export interface PaginaPedidosResponse {
+  data: PedidoDTO[];
+  page: number;
+  limit: number;
+  estado?: string;
+}
+
 export interface ProductoAdminDTO {
   id: number;
   nombre: string;
@@ -158,6 +191,48 @@ export const api = {
   eliminarProductoLogico(id: number): Promise<{ mensaje: string }> {
     return apiFetch<{ mensaje: string }>(`/productos/${id}`, {
       method: "DELETE",
+    });
+  },
+
+  /**
+   * GET /api/pedidos/mios
+   * Historial de compras del cliente actual.
+   */
+  getPedidosMios(page = 1, limit = 20): Promise<PaginaPedidosResponse> {
+    return apiFetch<PaginaPedidosResponse>(`/pedidos/mios?page=${page}&limit=${limit}`, {
+      method: "GET",
+    });
+  },
+
+  /**
+   * GET /api/pedidos
+   * Listado administrativo de pedidos con filtro opcional por estado.
+   */
+  getPedidosAdmin(estado?: string, page = 1, limit = 50): Promise<PaginaPedidosResponse> {
+    const estadoQuery = estado ? `&estado=${encodeURIComponent(estado)}` : "";
+    return apiFetch<PaginaPedidosResponse>(`/pedidos?page=${page}&limit=${limit}${estadoQuery}`, {
+      method: "GET",
+    });
+  },
+
+  /**
+   * GET /api/pedidos/:id
+   * Detalle completo del pedido (cabecera + items).
+   */
+  getPedidoDetalle(id: number): Promise<PedidoConDetalleDTO> {
+    return apiFetch<PedidoConDetalleDTO>(`/pedidos/${id}`, {
+      method: "GET",
+    });
+  },
+
+  /**
+   * PATCH /api/pedidos/:id/estado
+   * Cambiar estado de un pedido (admin).
+   */
+  actualizarEstadoPedido(id: number, nuevoEstado: string): Promise<{ mensaje: string; estado: string }> {
+    return apiFetch<{ mensaje: string; estado: string }>(`/pedidos/${id}/estado`, {
+      method: "PATCH",
+      json: { estado: nuevoEstado },
     });
   },
 
