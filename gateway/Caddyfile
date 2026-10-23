@@ -108,9 +108,32 @@
 
         # --- API routers --------------------------------------------------------
         # SaaS primero: /api/saas/* es mas especifico que /api/* y debe ganar.
+        #
+        # Active health checks (#21): cada upstream declara por que path se lo
+        # puede interrogar. `health_uri` NO es el path que se proxea: es el que
+        # Caddy consulta directo al upstream, asi que aca son los mismos paths
+        # que ya usan los healthchecks de docker-compose.
+        #
+        # Que compra: cuando un upstream deja de responder, Caddy lo saca de la
+        # rotacion en `health_interval` segundos, en vez de esperar a que llegue
+        # un request real y responderle un 502. Con un solo upstream por grupo
+        # no hay rotacion que repartir: el sintoma cambia de "502 con el error
+        # del upstream" a "503 no healthy upstream", que es el que corresponde
+        # cuando el servicio esta caido.
         reverse_proxy /api/saas/* http://saas-api:8000 {
             header_up X-Forwarded-For {host}
             header_up X-Real-IP {remote}
+
+            # El health del SaaS responde 200 mientras el proceso atienda; no
+            # chequea Postgres ni Redis. Detecta el proceso colgado, que es lo
+            # que este health check puede afirmar sin mentir.
+            health_uri /api/saas/health
+            health_interval 10s
+            health_timeout 5s
+            health_status 200
+            # Con un upstream solo no cambia nada; queda explicito para cuando
+            # haya mas de una replica del SaaS.
+            lb_policy round_robin
         }
 
         # Backend Go/Fiber B2C (catalogo + checkout + MLM). Sin rewrite: el
@@ -118,6 +141,20 @@
         reverse_proxy /api/* http://backend:3000 {
             header_up X-Forwarded-For {host}
             header_up X-Real-IP {remote}
+
+            # El health del Backend pingea Postgres y Redis:
+            #   - Postgres caido -> 503 (unhealthy): sin base no puede atender
+            #     nada, asi que sale de rotacion.
+            #   - Redis caido   -> 200 con status "degraded": el Backend sigue
+            #     sirviendo sin cache, asi que `health_status 200` lo deja
+            #     rutear a proposito.
+            # El timeout del health es de 5s porque el ping del Backend puede
+            # tardar hasta 2s por dependencia.
+            health_uri /api/health
+            health_interval 10s
+            health_timeout 5s
+            health_status 200
+            lb_policy round_robin
         }
 
         # Frontend estatico. Ya no es placeholder: el `dist/` del SPA se compila
