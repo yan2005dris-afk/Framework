@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams, useRouter } from "@tanstack/react-router";
 import { getProductoById } from "../../services/productosService";
 import type { Producto } from "../../data/productos";
 import { useCart } from "../../Context/useCart";
@@ -8,8 +8,8 @@ import { useCart } from "../../Context/useCart";
  * Vista de detalle de producto con selector de galería y visualizador Lightbox interactivo.
  */
 const DetalleProducto = () => {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const { id } = useParams({ from: "/_auth/producto/$id" });
+  const router = useRouter();
   const { addToCart } = useCart();
 
   const [producto, setProducto] = useState<Producto | null>(null);
@@ -78,7 +78,7 @@ const DetalleProducto = () => {
   return (
     <div>
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => router.history.back()}
         className="text-indigo-600 font-semibold hover:underline mb-6 inline-flex items-center gap-1"
       >
         ← Volver

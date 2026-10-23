@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useCart } from "../../Context/useCart";
 import { api } from "../../services/api";
+import type { PedidoConfirmado } from "../../types/pedido-confirmado";
 
 interface DatosEnvio {
   nombre: string;
@@ -77,7 +78,9 @@ const Checkout = () => {
         })),
       });
 
-      const pedido = {
+      // El payload se tipa contra la forma compartida, asi el contrato entre
+      // Checkout y Confirmacion queda verificado por tsc.
+      const pedido: PedidoConfirmado = {
         numero: resp.numero || `MC-${resp.pedidoId}`,
         items: cart.map((item) => ({
           nombre: item.nombre,
@@ -94,7 +97,12 @@ const Checkout = () => {
       };
 
       clearCart();
-      navigate("/confirmacion", { state: { pedido } });
+      // Unico cast de la app para `navigate`: TanStack tipa `state` contra el
+      // historial completo (`ParsedHistoryState`, con claves internas como
+      // `__TSR_index`) y no se puede ampliar sin agregar `@tanstack/history`
+      // como dependencia directa. La forma real del state es
+      // `PedidoConfirmadoState`, verificada arriba y leida en Confirmacion.
+      navigate({ to: "/confirmacion", state: { pedido } as never });
     } catch (err: unknown) {
       console.error("Error al procesar el checkout:", err);
       setError(

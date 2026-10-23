@@ -16,6 +16,13 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Alias @/ -> src/. Lo exige shadcn para resolver sus imports.
+       Sin "baseUrl": esta deprecada y falla en TypeScript 6. Los "paths"
+       se resuelven relativos a este archivo. */
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,

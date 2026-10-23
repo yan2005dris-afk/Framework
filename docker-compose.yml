@@ -1,16 +1,26 @@
 # Docker Compose raiz para MultiCatalogo.
 #
 # Levanta los 6 servicios del stack:
-#   - gateway      (Caddy :8080 host)    - punto de entrada unico
+#   - gateway      (Caddy :8080 host)    - punto de entrada unico: sirve el
+#                                          SPA compilado en / y proxea /api/*
 #   - auth-service (:3001)             - emision/validacion de JWTs
 #   - backend      (:3000)             - B2C: catalogo+checkout+MLM
 #   - saas-api     (:8000)             - SaaS multi-tenant
 #   - redis        (:6379)             - cache del Backend
 #   - db           (:5432)             - Postgres compartido
 #
+# El frontend va DENTRO de la imagen del gateway (build multistage), asi que
+# `docker compose up -d` deja la app completa en :8080 y no hay frontend que
+# levantar aparte.
+#
+# Para desarrollo hay ademas un servicio `frontend` bajo el profile `dev`: Vite
+# con HMR sobre el codigo del host, en :5173. Solo arranca si se pide el
+# profile; el build de produccion nunca pasa por ahi.
+#
 # Comandos utiles (desde la raiz del repo):
-#   docker compose up -d              # arranca todo
+#   docker compose up -d              # arranca todo (SPA incluido, en :8080)
 #   docker compose up -d --build       # rebuild imagenes tras cambios en codigo
+#   docker compose --profile dev up -d frontend   # SPA con HMR en :5173
 #   docker compose logs -f gateway     # logs del gateway
 #   docker compose logs -f backend auth-service saas-api
 #   docker compose down                # baja todo, conserva volumenes
@@ -21,7 +31,7 @@
 #   cd Backend && go run main.go          # Backend nativo en :3000
 #   cd auth-service && go run main.go    # auth-service nativo en :3001
 #   cd fastAPI_SaaS && uv run uvicorn ... # SaaS nativo en :8000
-#   docker compose up gateway            # gateway Caddy en :8080 host
+#   docker compose up gateway            # gateway Caddy en :8080 host (con SPA)
 #   # OJO: en este modo hay que mapear host -> servicio con /etc/hosts
 #   # o usar --network host. Lo mas simple: levantar todo via compose.
 
@@ -163,7 +173,11 @@ services:
 
   gateway:
     build:
-      context: ./gateway
+      # Contexto en la RAIZ porque gateway/Dockerfile es multistage: compila
+      # Frontend/ con node+pnpm y copia el dist a la imagen final de Caddy.
+      # El .dockerignore de la raiz evita que el contexto mande ~440MB.
+      context: .
+      dockerfile: gateway/Dockerfile
     container_name: multicatalogo-gateway
     restart: unless-stopped
     depends_on:
@@ -178,6 +192,56 @@ services:
     # Healthcheck contra /  - Caddy siempre responde; si los backends
     # no responden, Caddy devuelve 502, que el healthcheck vera.
 
+  # ============================================================================
+  # FRONTEND (solo desarrollo)
+  # ============================================================================
+
+  # Dev server de Vite con HMR sobre el codigo del host, en :5173.
+  #
+  # NO es parte del stack: el build de produccion del SPA lo compila el stage
+  # `frontend` de gateway/Dockerfile y el gateway lo sirve en :8080. Este
+  # servicio existe para iterar sin rebuild de imagen.
+  #
+  # El profile `dev` es lo que mantiene `docker compose up -d` (a secas)
+  # sirviendo el SPA compilado y sin abrir :5173.
+  frontend:
+    profiles:
+      - dev
+    build:
+      # Contexto raiz (igual que el gateway) para que aplique el mismo
+      # .dockerignore y `node_modules`/`dist` del host no viajen al build.
+      context: .
+      dockerfile: Frontend/Dockerfile
+    container_name: multicatalogo-frontend
+    restart: unless-stopped
+    depends_on:
+      # Sin `condition`: el gateway puede tardar en healthy mientras espera a
+      # los backends y el dev server puede arrancar igual (solo cambia si el
+      # /api falla en ese momento).
+      - gateway
+    environment:
+      # Contrato de Frontend/vite.config.ts: el proxy de dev reenvia /api a
+      # este target. En el host es http://localhost:8080; dentro de la red de
+      # compose el gateway se llama `gateway`, no `localhost`.
+      VITE_DEV_API_TARGET: ${VITE_DEV_API_TARGET:-http://gateway:8080}
+      # Base relativa: el SPA habla con /api del mismo origen (:5173) y el
+      # proxy de arriba lo lleva a la API real. Sin CORS y con la cookie
+      # httpOnly auth_token viajando al mismo host.
+      VITE_API_URL: /api
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      # Codigo del host: HMR recompila al guardar.
+      - ./Frontend:/app
+      # node_modules en volumen con nombre: tapa el del host (que es del
+      # sistema, no del contenedor) y preserva el que instalo la imagen al
+      # construirla; Docker lo siembra en el primer arranque.
+      # Si cambiaron dependencias: docker compose --profile dev build frontend
+      # y despues `up -d` de nuevo.
+      - frontend_node_modules:/app/node_modules
+
 volumes:
   db_data:
     name: multicatalogo_db_data
+  # node_modules del servicio frontend de dev (profile `dev`).
+  frontend_node_modules:

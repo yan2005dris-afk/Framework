@@ -1,108 +1,122 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useCart } from "../../Context/useCart";
 import { useAuth } from "../../Context/useAuth";
 import { Icon } from "../Share/Icon";
+import UserMenu from "./UserMenu";
 
 interface NavbarProps {
+  /** Escritorio: colapsa/expande el riel del sidebar. */
   onToggleSidebar: () => void;
+  /** Móvil: abre el drawer (`ui/sheet`). */
+  onOpenMobileNav: () => void;
   isCollapsed?: boolean;
 }
 
 /**
- * Barra superior de navegación con badge de rol, contador de carrito y menú de usuario.
+ * Barra superior de navegación con toggle del sidebar, badge de rol, contador de
+ * carrito y menú de usuario.
+ *
+ * Sigue `app-header.tsx` de shadcn-admin (acciones a la derecha, trigger a la
+ * izquierda) pero con los mismos datos que antes: rol, carrito y usuario.
  */
-const Navbar = ({ onToggleSidebar }: NavbarProps) => {
+const Navbar = ({
+  onToggleSidebar,
+  onOpenMobileNav,
+  isCollapsed = false,
+}: NavbarProps) => {
   const { totalItems } = useCart();
-  const { logout, user } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
+  const titulo =
+    user?.rol === "admin" ? "Panel de Administración" : "Tienda MultiCatálogo";
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 md:px-8 z-10">
-      {/* Botón de Toggle y Título */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onToggleSidebar}
-          aria-label="Toggle Sidebar"
-          className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+    <header className="z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 sm:px-6 md:px-8">
+      <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+        {/* Móvil: abre el drawer off-canvas. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="min-h-11 min-w-11 shrink-0 text-slate-600 md:hidden"
+          onClick={onOpenMobileNav}
+          aria-label="Abrir menú de navegación"
+          aria-haspopup="dialog"
         >
-          <Icon name="menu" size={22} />
-        </button>
-        <h2 className="text-slate-800 font-semibold text-base sm:text-lg">
-          {user?.rol === "admin"
-            ? "Panel de Administración"
-            : "Tienda MultiCatálogo"}
+          <Icon name="menu" className="size-5" />
+        </Button>
+
+        {/* Escritorio: colapsa/expande el riel de iconos. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden min-h-11 min-w-11 shrink-0 text-slate-600 md:inline-flex"
+          onClick={onToggleSidebar}
+          aria-expanded={!isCollapsed}
+          aria-controls="app-sidebar"
+          aria-label={
+            isCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"
+          }
+        >
+          <Icon
+            name={isCollapsed ? "panel-left-open" : "panel-left-close"}
+            className="size-5"
+          />
+        </Button>
+
+        <h2 className="truncate text-base font-semibold text-slate-800 sm:text-lg">
+          {titulo}
         </h2>
       </div>
 
-      {/* Acciones del Navbar: Carrito y Perfil */}
-      <div className="flex items-center gap-3 sm:gap-6">
-        <Link
-          to="/carrito"
-          title="Ver Carrito"
-          className="relative p-2 text-slate-700 hover:bg-slate-100 rounded-full transition-colors flex items-center justify-center"
+      {/* Acciones: carrito, rol y menú de usuario. */}
+      <div className="flex shrink-0 items-center gap-1 sm:gap-3">
+        <Button
+          asChild
+          variant="ghost"
+          size="icon"
+          className="relative min-h-11 min-w-11 text-slate-700 sm:min-h-9 sm:min-w-9"
         >
-          <Icon name="shopping-cart" size={20} />
-          {totalItems > 0 && (
-            <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full shadow">
-              {totalItems}
-            </span>
-          )}
-        </Link>
+          <Link
+            to="/carrito"
+            title="Ver Carrito"
+            aria-label={
+              totalItems > 0
+                ? `Ver carrito, ${totalItems} artículos`
+                : "Ver carrito"
+            }
+          >
+            <Icon name="shopping-cart" className="size-5" />
+            {totalItems > 0 && (
+              <Badge className="absolute -top-0.5 -right-0.5 size-5 rounded-full bg-indigo-600 p-0 text-[10px] font-bold text-white shadow-sm">
+                {totalItems}
+              </Badge>
+            )}
+          </Link>
+        </Button>
 
-        <div className="flex items-center gap-3">
-          {user?.email && (
-            <span className="hidden md:inline text-xs sm:text-sm text-slate-500 max-w-[150px] truncate">
-              {user.email}
-            </span>
-          )}
+        {user?.email && (
+          <span className="hidden max-w-[150px] truncate text-xs text-slate-500 md:inline sm:text-sm">
+            {user.email}
+          </span>
+        )}
 
-          {user?.rol && (
-            <span
-              className={`hidden sm:inline-block text-xs font-bold px-2.5 py-0.5 rounded-full uppercase ${
-                user.rol === "admin"
-                  ? "bg-amber-100 text-amber-800"
-                  : "bg-indigo-100 text-indigo-800"
-              }`}
-            >
-              {user.rol}
-            </span>
-          )}
+        {user?.rol && (
+          <Badge
+            className={cn(
+              "hidden font-bold uppercase sm:inline-flex",
+              user.rol === "admin"
+                ? "bg-amber-100 text-amber-800"
+                : "bg-indigo-100 text-indigo-800"
+            )}
+          >
+            {user.rol}
+          </Badge>
+        )}
 
-          {/* Menú de Usuario */}
-          <div className="relative group cursor-pointer py-1">
-            <div className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden border border-slate-300 flex items-center justify-center">
-              <img
-                src="https://fastly.picsum.photos/id/64/4326/2884.jpg?hmac=9_SzX666YRpR_fOyYStXpfSiJ_edO3ghlSRnH2w09Kg"
-                alt="Avatar"
-                className="w-full h-full object-cover"
-              />
-            </div>
-
-            {/* Menú desplegable */}
-            <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50 p-1">
-              <div className="px-3 py-2 border-b border-slate-100 md:hidden">
-                <p className="text-xs text-slate-400 font-medium">
-                  Conectado como:
-                </p>
-                <p className="text-xs text-slate-700 font-semibold truncate">
-                  {user?.email}
-                </p>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="w-full text-left min-h-[44px] px-3 py-2 text-sm text-red-600 font-medium hover:bg-red-50 rounded-md transition-colors flex items-center gap-2"
-              >
-                <Icon name="log-out" size={16} />
-                Cerrar Sesión
-              </button>
-            </div>
-          </div>
-        </div>
+        <UserMenu />
       </div>
     </header>
   );

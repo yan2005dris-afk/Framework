@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { useAuth } from "../../Context/useAuth";
 import { getProductos } from "../../services/productosService";
 import { categorias, type Producto } from "../../data/productos";
@@ -79,7 +79,8 @@ const Storefront = () => {
           {categorias.map((cat) => (
             <Link
               key={cat}
-              to={`/catalogo?categoria=${encodeURIComponent(cat)}`}
+              to="/catalogo"
+              search={{ categoria: cat }}
               className="bg-white border border-slate-200 rounded-xl p-6 text-center shadow-sm hover:shadow-md hover:border-indigo-300 hover:-translate-y-1 transition-all"
             >
               <p className="font-semibold text-slate-700">{cat}</p>
@@ -101,7 +102,8 @@ const Storefront = () => {
             {destacados.map((prod) => (
               <Link
                 key={prod.id}
-                to={`/producto/${prod.id}`}
+                to="/producto/$id"
+                params={{ id: String(prod.id) }}
                 className="bg-white rounded-xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all group flex flex-col"
               >
                 <img

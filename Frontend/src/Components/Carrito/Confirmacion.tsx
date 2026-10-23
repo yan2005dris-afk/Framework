@@ -1,19 +1,15 @@
-import { Link, useLocation } from "react-router-dom";
-
-interface PedidoConfirmado {
-  numero: string;
-  items: { nombre: string; cantidad: number; precio: number }[];
-  total: number;
-  cliente: { nombre: string; email: string; ciudad: string };
-  fecha: string;
-}
+import { Link, useLocation } from "@tanstack/react-router";
+import type { PedidoConfirmadoState } from "../../types/pedido-confirmado";
 
 /**
  * Vista de Confirmación de Pedido con resumen y detalles del cliente.
  */
 const Confirmacion = () => {
   const location = useLocation();
-  const pedido = (location.state as { pedido?: PedidoConfirmado } | null)?.pedido;
+  // El state llega de `navigate({ state })` en Checkout. Se tipa contra la forma
+  // declarada en types/pedido-confirmado.ts y se pierde al recargar: en ese caso
+  // caemos en el mensaje de gracias.
+  const pedido = (location.state as Partial<PedidoConfirmadoState>).pedido;
 
   if (!pedido) {
     return (

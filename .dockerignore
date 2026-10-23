@@ -1,0 +1,58 @@
+# .dockerignore de la RAIZ del repo.
+#
+# Desde U4-T1 el contexto de build del gateway es la raiz (`context: .` +
+# `dockerfile: gateway/Dockerfile`): el Dockerfile es multistage y compila
+# Frontend/ con node+pnpm antes de copiar el dist a la imagen de Caddy. Sin este
+# archivo el build manda ~440MB (node_modules, .git, .venv, docs) por la red en
+# cada `docker compose build`.
+#
+# OJO: .dockerignore aplica SOLO al contexto de build. Los bind mounts de
+# docker-compose.yml (p.ej. ./Backend/database/init.sql) siguen viendo el
+# archivo del host aunque aca lo excluyamos.
+
+# --- Versionado e historial ---------------------------------------------------
+.git
+.gitignore
+.gitattributes
+.github
+
+# --- Dependencias y artefactos de build --------------------------------------
+**/node_modules
+**/.pnpm-store
+**/dist
+**/dist-ssr
+**/build
+**/.tanstack
+**/.atl
+**/logs
+
+# routeTree.gen.ts lo genera @tanstack/router-plugin en cada `pnpm build`
+# (`tsr generate`). Esta en .gitignore, asi que si viajara al build seria el
+# routeTree del host, desactualizado, y el `tsc -b` de la imagen fallaria.
+**/src/routeTree.gen.ts
+
+# --- Secretos -----------------------------------------------------------------
+# El build no necesita ningun .env: la base de la API tiene fallback en el
+# codigo (`DEFAULT_API_BASE_URL = "/api"` en Frontend/src/services/http.ts), asi
+# que ni .env ni .env.example viajan al build.
+.env
+**/.env
+**/.env.*
+
+# --- Otros servicios: no se compilan desde este contexto ----------------------
+# El unico build con contexto raiz es el gateway, que solo necesita Frontend/.
+# Excluir estos baja el contexto de ~440MB a ~1MB. Los volumenes del
+# compose (init.sql del Backend) son bind mounts y no pasan por el contexto.
+Backend
+auth-service
+fastAPI_SaaS
+tests
+
+# --- Documentacion y tooling --------------------------------------------------
+docs
+odd
+.perch
+.vscode
+.pytest_cache
+*.md
+*.log
