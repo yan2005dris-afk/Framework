@@ -20,8 +20,8 @@
 
 | Ítem | Valor |
 |---|---|
-| **Hito actual** | **Backoffice MLM Fase 2 (CRUD Productos) + Fase 4/5 (Comisiones y Liquidaciones)** |
-| **Última tarea completada** | CRUD de productos admin con borrado lógico e invalidación en Redis + Pruebas unitarias (2026-10-23) |
+| **Hito actual** | **Backoffice MultiCatálogo Completo (Fases 0 a 7 completadas y testeadas)** |
+| **Última tarea completada** | Búsqueda server-side `?q=` ILIKE en productos, registro con código upline y cierre de operaciones (2026-10-23) |
 | **Siguiente tarea pendiente** | Commit del trabajo actual; luego U3-T1: scaffold FastAPI `Unidad3_SaaS/` |
 | **Bloqueadores** | Ninguno. `backend-haskell` detenido (`docker start backend-haskell` restaura); `postgres-funcional` en :5433 → Postgres propio en **5434** |
 
