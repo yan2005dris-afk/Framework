@@ -95,6 +95,20 @@ func TestAuthServiceLoginDirect(t *testing.T) {
 		t.Fatalf("Login falló con status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
+	// El JWT debe viajar SOLO en la cookie httpOnly. Si tambien viene en el
+	// body, cualquier XSS puede leerlo y el httpOnly deja de proteger nada.
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("No se pudo leer el body del login: %v", err)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		t.Fatalf("El body del login no es JSON: %v (%s)", err, string(bodyBytes))
+	}
+	if _, leaked := payload["token"]; leaked {
+		t.Error("El body del login incluye el JWT; debe viajar solo en la cookie httpOnly")
+	}
+
 	// Verificar que haya una cookie Set-Cookie
 	cookies := resp.Cookies()
 	var authCookie *http.Cookie
