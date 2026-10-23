@@ -32,18 +32,19 @@
 # TLS (#20). La direccion del sitio sale del entorno, no del archivo, para no
 # tener dos Caddyfiles que se separan con el tiempo:
 #
-#   - Sin SITE_ADDRESS (desarrollo, el default): `http://localhost:8080`, HTTP
-#     plano. Es exactamente el comportamiento previo a U4.
+#   - Sin SITE_ADDRESS (desarrollo, el default): `http://:8080`, acepta
+#     cualquier host por HTTP plano sin intentar activar TLS automatico.
 #   - Con SITE_ADDRESS=api.tudominio.com y ACME_EMAIL=vos@tudominio.com:
 #     Caddy pide el certificado a Let's Encrypt por HTTP-01 (puerto 80) y lo
-#     renueva solo. Pasar a produccion es cambiar dos variables del `.env`,
-#     no editar este archivo.
+#     renueva solo.
 #
 # OJO: la variable no puede quedar DEFINIDA VACIA. Si SITE_ADDRESS existe pero
 # esta vacio, el placeholder no resuelve, el bloque se interpreta como site
 # global y Caddy ni arranca ("unrecognized global option"). Para no publicar
 # TLS, la linea se comenta en el `.env`; nunca se deja en blanco.
-{$SITE_ADDRESS:http://localhost:8080} {
+{$SITE_ADDRESS:http://:8080} {
+
+
 
     # TLS (#20). Hay un solo interruptor, ACME_EMAIL, y tres modos:
     #
