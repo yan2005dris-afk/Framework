@@ -3,7 +3,7 @@
 // Endpoints (todos publicos, el gateway hace forward_auth para los que
 // requieren token):
 //
-//	POST /auth/login    - body {email, password} -> 200 {token, ...} + cookie
+//	POST /auth/login    - body {email, password} -> 200 {email, rol, expires} + cookie
 //	POST /auth/logout   - limpia cookies
 //	POST /auth/refresh  - emite un JWT nuevo a partir de uno vigente
 //	POST /auth/validate - lee token (cookie o header), setea headers, 200/401
@@ -54,7 +54,8 @@ func NewAuthHandler(cfg *config.Config, pool *pgxpool.Pool) *AuthHandler {
 // Respuestas:
 //   - 400 si body invalido o email/password vacios.
 //   - 401 si usuario no existe o password incorrecta.
-//   - 200 con {token, email, rol, expires} + cookies.
+//   - 200 con {email, rol, expires} + cookies. El JWT NO va en el body:
+//     solo en la cookie httpOnly, para que un XSS no pueda leerlo.
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req struct {
 		Email    string `json:"email"`
@@ -100,8 +101,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(ttl),
 	})
 
+	// El JWT viaja SOLO en la cookie httpOnly de arriba. Devolverlo tambien en
+	// el body anulaba esa proteccion: un XSS podia leerlo desde JavaScript.
 	return c.JSON(fiber.Map{
-		"token":   token,
 		"email":   user.Email,
 		"rol":     user.Rol,
 		"expires": int(h.Cfg.JWTExpiresSecs),
@@ -209,8 +211,8 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(ttl),
 	})
 
+	// Mismo criterio que en Login: el token nuevo viaja solo en la cookie.
 	return c.JSON(fiber.Map{
-		"token":   signed,
 		"email":   claims.Email,
 		"rol":     claims.Rol,
 		"expires": int(h.Cfg.JWTExpiresSecs),
