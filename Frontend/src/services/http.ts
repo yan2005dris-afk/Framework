@@ -12,7 +12,18 @@
  *   frontend pueda limpiar la sesión y redirigir al login.
  */
 
-const DEFAULT_API_BASE_URL = "http://localhost:3000/api";
+/**
+ * Base por defecto: ruta RELATIVA, no URL absoluta.
+ *
+ * Con `/api` la peticion sale del mismo origen que el SPA, asi que no hay CORS y
+ * la cookie httpOnly `auth_token` (host-only, SameSite=lax) se emite y vuelve en
+ * el mismo host. En dev el proxy de Vite la reenvia al gateway; con el build
+ * estatico, el gateway sirve SPA y API en el mismo origen.
+ *
+ * Una URL absoluta como `http://localhost:3000/api` (el Backend directo) rompe:
+ * el browser la ve como otro origen y la bloquea por Same Origin Policy.
+ */
+const DEFAULT_API_BASE_URL = "/api";
 
 export const apiBaseURL =
   (import.meta.env.VITE_API_URL as string | undefined) || DEFAULT_API_BASE_URL;

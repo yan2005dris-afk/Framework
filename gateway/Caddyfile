@@ -4,7 +4,7 @@
 #   /api/*        -> Backend Go/Fiber (B2C)   :3000
 #   /api/saas/*   -> SaaS FastAPI             :8000
 #   /health       -> health del propio gateway (sin auth)
-#   /             -> frontend estatico (placeholder; build real llega en U4)
+#   /             -> frontend estatico (SPA compilado en la imagen del gateway)
 #
 # El Backend monta su grupo de rutas en /api (Backend/routes/routes.go:
 # `api := app.Group("/api")`), asi que el path se reenvia SIN reescribir.
@@ -84,10 +84,19 @@
             header_up X-Real-IP {remote}
         }
 
-        # Frontend estatico (placeholder hasta U4 que traiga el build real).
-        # En este PR el volumen /srv/frontend no se monta, asi que 404.
-        # Mantengo el bloque para que cuando U4 monte el dist, funcione.
+        # Frontend estatico. Ya no es placeholder: el `dist/` del SPA se compila
+        # en el stage `frontend` de gateway/Dockerfile y la imagen final lo
+        # copia a /srv/frontend, que es esta raiz. No hay volumen que montar.
         root * /srv/frontend
+
+        # Fallback de SPA: si el path no existe en disco, se reescribe a
+        # index.html. Sin esto, un refresh o un deep link de las rutas de
+        # cliente (/catalogo, /mi-red, /producto/:id) devolveria 404 en vez de
+        # la app. Los assets con hash (/assets/*.js) SI existen en disco, asi
+        # que `try_files {path}` los sirve directos y no pasan por el fallback.
+        # Debe quedar ANTES de file_server y dentro del `route` (ver arriba).
+        try_files {path} /index.html
+
         file_server
     }
 

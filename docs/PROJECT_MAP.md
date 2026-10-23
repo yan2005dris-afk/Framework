@@ -8,14 +8,14 @@
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│  SPA React (Frontend/)           :5173                                    │
-│  cookies: auth_token + saas_token                                          │
+│  SPA React (Frontend/) — build estatico compilado dentro de la imagen      │
+│  del gateway. cookies: auth_token + saas_token                             │
 └────────────────────────────┬───────────────────────────────────────────────┘
-                             │ HTTP
+                             │ HTTP, mismo origen :8080
                              ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
 │  gateway/ (Caddy 2)              :8080                                     │
-│  reverse_proxy + forward_auth → auth-service:3001                           │
+│  file_server / (SPA) + reverse_proxy + forward_auth → auth-service:3001    │
 └────┬─────────────────┬─────────────────┬─────────────────┬────────────────┘
      │                 │                 │                 │
      ▼                 ▼                 ▼                 ▼
@@ -32,15 +32,26 @@
               schemas: auth, backend (public), saas
 ```
 
+### Frontend: produccion vs. desarrollo
+
+- **Produccion (defecto):** el `dist/` del SPA se compila en el stage `frontend` de `gateway/Dockerfile` y el gateway lo sirve en `/` con fallback a `index.html`. SPA y API comparten origen en **:8080**, que es lo que hace funcionar la cookie httpOnly `auth_token` sin CORS. `docker compose up -d` ya deja la app completa; no hay frontend que levantar.
+- **Desarrollo (opcional):** el servicio `frontend` del compose, bajo el profile `dev`, corre el dev server de Vite con HMR sobre el codigo del host en **:5173** y proxea `/api` al gateway (`VITE_DEV_API_TARGET=http://gateway:8080`). Es una comodidad, no parte del stack: sin `--profile dev` no arranca.
+
+```bash
+docker compose --profile dev up -d frontend    # http://localhost:5173
+```
+
+Ver `Frontend/README.md` y `gateway/README.md`.
+
 ## Servicios y sus READMEs
 
 | Servicio | Stack | Puerto | README |
 |---|---|---|---|
-| `Frontend/` | React 19 + Vite 8 + Tailwind 4 | 5173 | `Frontend/README.md` |
+| `gateway/` | Caddy 2 (SPA + API) | 8080 | `gateway/README.md` |
 | `Backend/` | Go/Fiber + pgx + redis | 3000 | `Backend/README.md` |
 | `auth-service/` | Go/Fiber + JWT + bcrypt | 3001 | `auth-service/README.md` |
 | `fastAPI_SaaS/` | FastAPI + SQLAlchemy 2 + Alembic | 8000 | `fastAPI_SaaS/README.md` |
-| `gateway/` | Caddy 2 | 8080 | `gateway/README.md` |
+| `Frontend/` | React 19 + Vite 8 + Tailwind 4 | 8080 (prod, via gateway) / 5173 (dev) | `Frontend/README.md` |
 
 ## Arquitectura detallada
 
@@ -75,8 +86,11 @@ Ver [`docs/architecture.md`](architecture.md) para:
 ## Comandos frecuentes
 
 ```bash
-# Levantar todo
+# Levantar todo (SPA incluido: lo sirve el gateway en :8080)
 docker compose up -d --build
+
+# Frontend con HMR en :5173, ademas del stack
+docker compose --profile dev up -d frontend
 
 # Ver logs
 docker compose logs -f gateway auth-service

@@ -7,7 +7,7 @@
 
 ```
                          ┌──────────────────────────────────────────────────────────┐
-                         │  Browser (futuro: React SPA)                              │
+                         │  Browser (React SPA servida por el gateway)              │
                          │  cookies: auth_token (B2C) + saas_token (SaaS)          │
                          └───────────────────────┬──────────────────────────────────┘
                                                  │ HTTP
@@ -15,10 +15,13 @@
 ┌────────────────────────────────────────────────────────────────────────────────────┐
 │  gateway (Caddy 2) — :8080                                                        │
 │                                                                                    │
-│  /api/tx/*     ───► backend:3000                                                   │
-│  /api/saas/*   ───► saas-api:8000                                                  │
-│  /api/auth/*   ───► auth-service:3001   (recomendado agregar retro; hoy proxied     │
-│                                       indirectamente por Backend/SaaS vía GA5/GA6)  │
+│  /                 ───► SPA estatico (dist compilado en la imagen)                 │
+│  /api/saas/*       ───► saas-api:8000                                              │
+│  /api/*            ───► backend:3000  (login, /me, productos, red,                 │
+│                                      checkout; el Backend ya sirve /api)           │
+│                                                                                    │
+│  Sin forward_auth (publicas): /api/login, /api/logout, /api/productos*,            │
+│  /api/saas/auth/*, /api/saas/health, /api/saas/webhooks/stripe                     │
 │                                                                                    │
 │  forward_auth auth-service:3001 { uri /auth/validate, copy_headers X-User-* }       │
 │  reverse_proxy X-User-* upstream (viaje transparente al backend/SaaS)               │
@@ -58,7 +61,7 @@
 
 ### 1. Auth centralizada vive en el gateway (no en cada servicio)
 
-Caddy hace `forward_auth auth-service:3001` con `uri /auth/validate`. Para cada request a `/api/tx/*` o `/api/saas/*`:
+Caddy hace `forward_auth auth-service:3001` con `uri /auth/validate`. Para cada request a `/api/*` o `/api/saas/*` (salvo las rutas públicas de arriba):
 
 1. Caddy extrae token (cookie `auth_token` o header `Authorization: Bearer`).
 2. Hace sub-request POST a `auth-service:3001/auth/validate`.
@@ -137,13 +140,13 @@ Las FK cross-schema funcionan (Postgres las soporta dentro de la misma BD). Las 
 
 ### 5. Flujo de un request típico
 
-Ejemplo: `GET /api/tx/red` con cookie `auth_token` válida:
+Ejemplo: `GET /api/red` con cookie `auth_token` válida:
 
-1. SPA hace `fetch('http://localhost:8080/api/tx/red', { credentials: 'include' })`. Cookie adjunta por el browser.
-2. Caddy recibe en `:8080`. Como el path matchea `/api/tx/*`, sabe que va al backend.
+1. SPA hace `fetch('/api/red', { credentials: 'include' })`. La ruta es **relativa**: el browser la resuelve contra el origen del SPA, que es el mismo `:8080` que sirve la API. Por eso no hay CORS y la cookie host-only `auth_token` se emite y vuelve en el mismo host.
+2. Caddy recibe en `:8080`. Como el path matchea `/api/*` (y no `/api/saas/*`), sabe que va al backend.
 3. Caddy extrae la cookie, hace sub-request POST a `auth-service:3001/auth/validate` con la cookie.
 4. auth-service verifica JWT (HS256 con `AUTH_JWT_SECRET`), responde 200 y setea headers `X-User-Id:1`, `X-User-Email:admin@...`, `X-User-Rol:admin`.
-5. Caddy copia esos headers y hace `reverse_proxy /api/tx/red http://backend:3000`.
+5. Caddy copia esos headers y hace `reverse_proxy /api/red http://backend:3000`.
 6. Backend recibe el request con los headers `X-User-*`. El middleware `RequireAuth` **defensa en profundidad** también verifica (lee el token de la cookie, lo verifica con el mismo secret, y poblaría `c.Locals`).
 7. Backend responde con el árbol MLM.
 8. Caddy devuelve la respuesta al cliente.
@@ -155,6 +158,7 @@ Si la cookie es inválida o ausente: el sub-request a `/auth/validate` da 401, C
 | Servicio | Vars clave |
 |---|---|
 | gateway | (sin vars, lee config desde compose) |
+| frontend (solo profile `dev`) | `VITE_DEV_API_TARGET`: target del proxy de dev (en compose es `http://gateway:8080`) |
 | auth-service | `APP_ENV`, `AUTH_JWT_SECRET`, `AUTH_DB_*`, `CORS_ORIGINS` |
 | backend | `APP_ENV`, `JWT_SECRET`/`AUTH_JWT_SECRET`, `BACKEND_DB_*`, `REDIS_*`, `AUTH_SERVICE_URL`, `CORS_ORIGINS` |
 | saas-api | `APP_ENV`, `AUTH_SERVICE_URL`, `SAAS_DB_*`, `CORS_ORIGINS` |
@@ -169,7 +173,15 @@ cp .env.example .env                  # AJUSTAR AUTH_JWT_SECRET a algo fuerte en
 docker compose up -d --build
 # Esperar ~30s para healthchecks
 bash tests/e2e/gateway_e2e.sh
+
+# El SPA ya lo sirve el gateway en http://localhost:8080 (el dist se compila
+# dentro de la imagen). Para desarrollo con HMR:
+docker compose --profile dev up -d frontend    # SPA en http://localhost:5173
 ```
+
+Nota de entorno: si el puerto 5432 del host ya esta ocupado, `docker compose up` falla
+con `Bind for 0.0.0.0:5432 failed`. Se levanta con `DB_PORT=5433 docker compose up -d`,
+que solo cambia el puerto del host; dentro de la red de compose el Postgres sigue en 5432.
 
 Para dev nativo (sin Docker): arrancar cada servicio individualmente con su `main.go` / `uvicorn`, ajustar `AUTH_SERVICE_URL` a `http://localhost:3001`.
 

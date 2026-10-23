@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { useCart } from "../../Context/useCart";
 
 /**
@@ -45,7 +45,10 @@ const Carrito = () => {
                     className="w-16 h-16 object-cover rounded-md"
                   />
                   <div>
-                    <Link to={`/producto/${item.id}`}>
+                    <Link
+                      to="/producto/$id"
+                      params={{ id: String(item.id) }}
+                    >
                       <h3 className="font-semibold text-slate-800 hover:text-indigo-600 transition">
                         {item.nombre}
                       </h3>
