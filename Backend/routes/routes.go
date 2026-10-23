@@ -18,6 +18,7 @@ func SetupRoutes(
 	checkoutCtrl *controllers.CheckoutController,
 	healthCtrl *controllers.HealthController,
 	liqCtrl *controllers.LiquidacionController,
+	pedCtrl *controllers.PedidoController,
 	dbRepo repository.DatabaseRepository,
 	jwtSecret string,
 ) {
@@ -60,6 +61,12 @@ func SetupRoutes(
 	// Checkout / Transacciones ACID (protegido)
 	api.Post("/checkout", requireAuth, checkoutCtrl.Checkout)
 
+	// Gestión de Pedidos (Fase 3)
+	api.Get("/pedidos/mios", requireAuth, pedCtrl.ListarPedidosMios)
+	api.Get("/pedidos", requireAuth, pedCtrl.ListarPedidosAdmin)
+	api.Get("/pedidos/:id", requireAuth, pedCtrl.ObtenerPedidoPorID)
+	api.Patch("/pedidos/:id/estado", requireAuth, pedCtrl.ActualizarEstado)
+
 	// Ledger de Comisiones y Liquidaciones (Fase 4 y Fase 5)
 	api.Get("/comisiones/mias", requireAuth, liqCtrl.ObtenerComisionesMias)
 	api.Get("/liquidaciones/mias", requireAuth, liqCtrl.ListarLiquidacionesMias)
@@ -81,6 +88,7 @@ func SetupDefaultRoutes(app *fiber.App) {
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, "dev")
 	healthCtrl := controllers.NewHealthController(nil, nil)
 	liqCtrl := controllers.NewLiquidacionController(dbRepo, "dev")
+	pedCtrl := controllers.NewPedidoController(dbRepo, "dev")
 
-	SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl, healthCtrl, liqCtrl, dbRepo, "dev-secret")
+	SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl, healthCtrl, liqCtrl, pedCtrl, dbRepo, "dev-secret")
 }
