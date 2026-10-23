@@ -214,3 +214,104 @@ func TestCheckoutSinKeyCreaPedidosDistintos(t *testing.T) {
 		t.Errorf("Sin key, dos POST tienen que crear dos pedidos distintos; ambos dieron %d", resp1.PedidoID)
 	}
 }
+
+// TestCheckoutIdempotencyConcurrenciaMismaKey prueba la carrera real:
+// Múltiples requests disparados en paralelo con la MISMA idempotency key.
+// Uno debe ganar e insertar (201), los demás deben atrapar el unique_violation (23505)
+// en Postgres, hacer rollback y devolver replay del ganador (200),
+// resultando en EXACTAMENTE 1 pedido creado en la base de datos.
+func TestCheckoutIdempotencyConcurrenciaMismaKey(t *testing.T) {
+	cookie := loginGateway(t)
+
+	conn, err := pgx.Connect(context.Background(), checkoutDSN())
+	if err != nil {
+		t.Skipf("No se pudo conectar a Postgres (%v). El test necesita la BD del stack.", err)
+	}
+	defer conn.Close(context.Background())
+
+	var existe int
+	if err := conn.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'checkout_idempotencia'`,
+	).Scan(&existe); err != nil || existe == 0 {
+		t.Skip("La tabla checkout_idempotencia no existe: la migración 006 no está aplicada.")
+	}
+
+	key := fmt.Sprintf("itest-concurrent-%d", time.Now().UnixNano())
+	const concurrencia = 5
+
+	type resultado struct {
+		status int
+		resp   checkoutResponseBody
+		err    error
+	}
+
+	resultados := make([]resultado, concurrencia)
+	start := make(chan struct{})
+	done := make(chan int, concurrencia)
+
+	for i := 0; i < concurrencia; i++ {
+		go func(idx int) {
+			<-start // Barrera de salida simultánea
+			status, body := postearCheckout(t, cookie, key)
+			resultados[idx] = resultado{status: status, resp: body}
+			done <- idx
+		}(i)
+	}
+
+	close(start) // Dispara todos los requests en paralelo
+
+	for i := 0; i < concurrencia; i++ {
+		<-done
+	}
+
+	var count201, count200 int
+	var pedidoIDGanador int
+
+	for i, r := range resultados {
+		if r.status == http.StatusCreated {
+			count201++
+			pedidoIDGanador = r.resp.PedidoID
+		} else if r.status == http.StatusOK {
+			count200++
+		} else {
+			t.Errorf("Request %d devolvió status inesperado %d: %+v", i, r.status, r.resp)
+		}
+	}
+
+	// Al menos uno debe haber creado el pedido (201)
+	if count201 < 1 {
+		t.Errorf("Se esperaba al menos un 201 Created, se obtuvieron: %d (200 OK: %d)", count201, count200)
+	}
+
+	// Todos los 200 y 201 deben apuntar al mismo PedidoID
+	for i, r := range resultados {
+		if r.resp.PedidoID != pedidoIDGanador {
+			t.Errorf("Request %d devolvió pedidoID %d, diferente al ganador %d", i, r.resp.PedidoID, pedidoIDGanador)
+		}
+	}
+
+	// Verificar contra la base de datos que solo exista 1 fila de idempotencia y 1 pedido
+	ctx := context.Background()
+	var filas int
+	if err := conn.QueryRow(ctx,
+		`SELECT COUNT(*) FROM checkout_idempotencia WHERE clave = $1`, key,
+	).Scan(&filas); err != nil {
+		t.Fatalf("No se pudo consultar checkout_idempotencia: %v", err)
+	}
+	if filas != 1 {
+		t.Errorf("La key concurrente %q quedó registrada %d veces, se esperaba exactamente 1", key, filas)
+	}
+
+	var pedidos int
+	if err := conn.QueryRow(ctx,
+		`SELECT COUNT(*) FROM pedidos WHERE id = $1`, pedidoIDGanador,
+	).Scan(&pedidos); err != nil {
+		t.Fatalf("No se pudo consultar pedidos: %v", err)
+	}
+	if pedidos != 1 {
+		t.Errorf("El pedido %d aparece %d veces, se esperaba 1", pedidoIDGanador, pedidos)
+	}
+
+	t.Logf("✓ Concurrencia superada (%d requests): %d creados (201), %d replays (200), PedidoID único %d",
+		concurrencia, count201, count200, pedidoIDGanador)
+}
