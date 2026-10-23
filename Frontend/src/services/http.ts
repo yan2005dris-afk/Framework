@@ -44,6 +44,28 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Error de RED: no hubo respuesta del servidor (se cortó la conexión, no hay
+ * señal, el servidor no levanta). Es distinto de un `ApiError`, que significa
+ * que el servidor respondió y respondió con un status.
+ *
+ * La diferencia importa porque un error de red deja el request en un estado
+ * indeterminado: pudo no haber llegado, o haber llegado y haberse perdido la
+ * respuesta. Solo en ese caso tiene sentido reintentar (U4-T3, S9).
+ */
+export class NetworkError extends Error {
+  // Campo declarado a mano y no como parameter property: el tsconfig tiene
+  // `erasableSyntaxOnly`, que prohibe la sintaxis de TypeScript que no se
+  // puede borrar al compilar.
+  readonly causa: unknown;
+
+  constructor(causa: unknown) {
+    super("No se pudo conectar con el servidor");
+    this.name = "NetworkError";
+    this.causa = causa;
+  }
+}
+
 export interface ApiFetchInit extends Omit<RequestInit, "body" | "credentials"> {
   /** Cuerpo JSON. Si está presente, se serializa y se setea Content-Type. */
   json?: unknown;
@@ -86,13 +108,18 @@ export async function apiFetch<T = unknown>(
     body = init.body ?? undefined;
   }
 
-  const response = await fetch(url, {
-    ...defaultInit,
-    ...init,
-    headers,
-    body,
-    credentials: "include",
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...defaultInit,
+      ...init,
+      headers,
+      body,
+      credentials: "include",
+    });
+  } catch (causa) {
+    throw new NetworkError(causa);
+  }
 
   if (response.status === 401) {
     init.onUnauthorized?.();

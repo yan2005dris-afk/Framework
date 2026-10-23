@@ -1,5 +1,4 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import type { IconName } from "lucide-react/dynamic";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -16,7 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAuth } from "../../Context/useAuth";
-import { Icon } from "../Share/Icon";
+import { Icon, type IconName } from "../Share/Icon";
 
 interface NavItem {
   name: string;

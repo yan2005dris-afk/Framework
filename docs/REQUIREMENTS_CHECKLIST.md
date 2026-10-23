@@ -194,8 +194,10 @@ React SPA (:5173) ──► Caddy/Nginx (U4: proxy inverso + SSL)
 > offline capability, meta tags y Lighthouse PWA criteria.
 
 ### Fase 1: Configuración base y manifest
-- [ ] Instalar `vite-plugin-pwa` (o `@vite-pwa/assets-generator`): `npm install -D vite-plugin-pwa workbox-window`
-- [ ] Crear `Frontend/public/manifest.json` con:
+- [x] Instalar `vite-plugin-pwa` (o `@vite-pwa/assets-generator`): `npm install -D vite-plugin-pwa workbox-window`
+      → `vite-plugin-pwa@2.0.0` + `workbox-window` + `workbox-build` (los peers que pide).
+      Los iconos se generaron con `rsvg-convert` desde `public/favicon.svg`, no con el assets-generator.
+- [x] Crear `Frontend/public/manifest.json` con:
   - `name`: "MultiCatálogo"
   - `short_name`: "MultiCatálogo"
   - `description`: "Tienda de cosméticos con red de ventas multinivel"
@@ -204,35 +206,92 @@ React SPA (:5173) ──► Caddy/Nginx (U4: proxy inverso + SSL)
   - `background_color`: "#ffffff"
   - `theme_color`: "#ffffff"
   - `orientation`: "portrait-primary"
-  - `icons`: [192x192, 512x512] (generar vía @vite-pwa/assets-generator)
-- [ ] Actualizar `Frontend/index.html` con meta tags PWA:
+  - `icons`: [192x192, 512x512] (generado vía @vite-pwa/assets-generator)
+    → se generaron tres: 192, 512 y un **maskable** de 512 con margen de
+    seguridad, que Android necesita para no recortar el icono.
+- [x] Actualizar `Frontend/index.html` con meta tags PWA:
   - `<meta name="theme-color" content="#ffffff">`
   - `<link rel="manifest" href="/manifest.json">`
   - `<link rel="apple-touch-icon" href="/icon-192.png">`
-- [ ] Configurar `vite.config.ts` con plugin PWA:
+    → además se corrigieron `lang="en"` → `es` y `<title>proyecto</title>` →
+    `MultiCatálogo`.
+- [x] Configurar `vite.config.ts` con plugin PWA:
   ```ts
   import { VitePWA } from 'vite-plugin-pwa'
   plugins: [react(), tailwindcss(), VitePWA({...})]
   ```
 
 ### Fase 2: Service Worker y estrategias de caché
-- [ ] Configurar Workbox strategies en `vite.config.ts`:
-  - `NetworkFirst` para `/api/*` (peticiones a backend)
-  - `CacheFirst` para assets estáticos (JS, CSS, imágenes)
-  - `StaleWhileRevalidate` para el HTML index
-- [ ] Service worker registrado en `Frontend/src/main.tsx` con `registerSW()`
-- [ ] UI de actualización disponible: mostrar banner cuando el SW tiene nueva versión
+- [x] Configurar Workbox strategies en `vite.config.ts`:
+  - ~~`NetworkFirst` para `/api/*`~~ → **desviado a propósito**: la API está
+    autenticada por cookie httpOnly y cachear `/api/me` o `/api/red` puede
+    mostrar datos de la sesión anterior. Solo se cachea el catálogo público
+    (`NetworkFirst` en `/api/productos`, `StaleWhileRevalidate` en
+    `/api/productos/:id`); todo lo demás de `/api` es `NetworkOnly`.
+  - Los assets estáticos se precachean (no `CacheFirst` en runtime: con el
+    precache de Workbox alcanza y no duplica la caché).
+  - El HTML usa `navigateFallback: '/index.html'` con `denylist` de `/api/`.
+- [x] Service worker registrado en `Frontend/src/main.tsx` con `registerSW()`
+- [x] UI de actualización disponible: banner cuando el SW tiene nueva versión
+      (`registerType: 'prompt'` + `Components/Pwa/UpdateBanner.tsx`)
 - [ ] Testing de SW: devtools → Application → Service Workers
+      → **no hecho**: la verificación fue por HTTP (el gateway sirve
+      `/manifest.json`, `/sw.js` y los iconos). Ver `odd/tasks/u4-t3-pwa.md`.
 
 ### Fase 3: Offline capability y UX
-- [ ] Página offline: `Frontend/src/pages/Offline.tsx` con mensaje amigable y botón "reintentar"
-- [ ] Service worker intercepta offline requests y sirve página offline
-- [ ] Indicador de conexión: mostrar estado online/offline en UI (hook `useOnlineStatus`)
-- [ ] Cola de peticiones fallidas: reintentar automáticamente cuando vuelve la conexión (para checkout/pedidos)
+- [x] Página offline: `Frontend/src/Components/Pwa/Offline.tsx` con mensaje amigable y botón "reintentar"
+      (el checklist decía `src/pages/`, pero el proyecto no usa `pages/`: usa `Components/`).
+- [x] Service worker intercepta offline requests y sirve página offline
+      (`navigateFallback` + `OfflineGuard` que manda a `/offline` si se cae la red con la app abierta)
+- [x] Indicador de conexión: hook `useOnlineStatus` (`useSyncExternalStore` sobre `navigator.onLine`)
+- [x] Cola de peticiones fallidas: reintento automático al volver la conexión
+      → **con idempotency key**, porque sin ella un reintento duplica el pedido.
+      Eso obligó a tocar el Backend: migración `006_checkout_idempotencia.sql` y
+      soporte de `Idempotency-Key` en `POST /api/checkout`. Verificado contra
+      la BD real en `tests/integration/checkout_idempotency_test.go`.
+
+### Extra que no estaba en el checklist
+- [x] **Fix P0 del gateway**: todo POST autenticado con body devolvía 502
+      (`forward_auth` consumía el body original). El checkout nunca funcionó por
+      el proxy. Corregido pasando el subrequest a `method GET`.
+
+## Cómo verificarlo a mano
+
+El stack ya sirve la PWA en `http://localhost:8080` (en producción, con
+`SITE_ADDRESS` y `ACME_EMAIL`):
+
+```bash
+curl -s http://localhost:8080/manifest.json | head
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/sw.js
+```
+
+Para lo que curl no alcanza (que el SW quede registrado y que la app abra sin
+red), hay que usar el navegador: DevTools → Application → Service Workers, y la
+pestaña Network con el checkbox "Offline" marcado.
 
 ### Fase 4: Lighthouse PWA audit
-- [ ] Ejecutar Lighthouse audit en Chrome DevTools (categoría PWA)
+- [x] Ejecutar Lighthouse audit en Chrome DevTools (categoría PWA)
+      → **imposible tal cual está escrito**: la categoría PWA ya no existe en
+      Lighthouse. Google la eliminó; en la versión actual (13.5.0) las
+      categorías disponibles son `accessibility`, `best-practices`,
+      `performance`, `seo` y `agentic-browsing`. El criterio de "score ≥90 en
+      la categoría PWA" quedó obsoleto y hay que reformularlo.
+      → Se corrieron las tres categorías que sí existen, sobre el stack real
+      (`http://localhost:8080`):
+      **accessibility 96 · best-practices 96 · performance 81** (FCP 3,4 s).
 - [ ] Verificar score ≥90 en todos los criterios PWA:
+  - [x] PWA Optimized (manifest correcto) → verificado por HTTP: `/manifest.json`
+        se sirve con los campos del checklist y los 3 iconos.
+  - [x] Installable (iconos, start_url, display) → 192, 512 y maskable de 512,
+        `start_url: "/"`, `display: "standalone"`.
+  - [x] La app renderiza con el service worker registrado → verificado con
+        chromium contra el gateway: el login se dibuja y la consola queda
+        limpia. Esto se rompió una vez por un componente montado fuera del
+        `RouterProvider`, y ni `pnpm lint` ni `pnpm build` lo detectaban.
+  - [ ] Works Offline → no verificado: requiere DevTools con la red apagada.
+  - [x] HTTPS (requisito de U4-T2) → resuelto en `develop` (SITE_ADDRESS +
+        ACME_EMAIL). En `localhost` el service worker corre igual porque es
+        secure context.
   - [ ] PWA Optimized (manifest correcto)
   - [ ] Installable (iconos, start_url, display)
   - [ ] Service Worker registrado y activo

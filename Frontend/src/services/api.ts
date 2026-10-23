@@ -1,5 +1,11 @@
 import type { Producto } from "../data/productos";
-import { ApiError, apiFetch } from "./http";
+import type { CheckoutRequestDTO, CheckoutResponseDTO } from "@/types/checkout";
+import { ApiError, NetworkError, apiFetch } from "./http";
+import {
+  guardarIntento,
+  nuevaIdempotencyKey,
+  type IntentoPendiente,
+} from "@/lib/checkoutRetry";
 
 export interface LoginResponse {
   email: string;
@@ -11,29 +17,6 @@ export interface MeResponse {
   id: number;
   email: string;
   rol: "admin" | "cliente";
-}
-
-export interface CheckoutItemDTO {
-  productoId: number;
-  cantidad: number;
-  precio: number;
-}
-
-export interface CheckoutRequestDTO {
-  nombreCliente: string;
-  emailCliente: string;
-  direccion?: string;
-  ciudad?: string;
-  telefono?: string;
-  metodoPago: string;
-  items: CheckoutItemDTO[];
-}
-
-export interface CheckoutResponseDTO {
-  pedidoId: number;
-  numero: string;
-  total: number;
-  mensaje: string;
 }
 
 /**
@@ -104,17 +87,45 @@ export const api = {
    * Checkout transaccional ACID. La identidad del usuario se toma del JWT
    * en la cookie; el campo emailCliente del body es sobrescrito por el
    * backend con el email del token antes de la transacción.
+   *
+   * U4-T3: cada intento lleva su propia `Idempotency-Key`. Si la request falla
+   * por RED (no hubo respuesta), el intento queda en la cola de reintentos con
+   * esa misma key: el Backend devuelve el pedido original en vez de crear un
+   * segundo, se haya creado o no el primero.
    */
   checkout(
     payload: CheckoutRequestDTO,
     onUnauthorized?: () => void
   ): Promise<CheckoutResponseDTO> {
+    const idempotencyKey = nuevaIdempotencyKey();
     return apiFetch<CheckoutResponseDTO>("/checkout", {
       method: "POST",
       json: payload,
       onUnauthorized,
+      headers: { "Idempotency-Key": idempotencyKey },
+    }).catch((error: unknown) => {
+      // Solo el fallo de RED deja el pedido en un estado indeterminado. Un 4xx
+      // o un 5xx son respuestas del servidor: reenviarlos no arregla nada y
+      // multiplicaría el problema.
+      if (error instanceof NetworkError) {
+        guardarIntento({ idempotencyKey, payload, guardadoAt: new Date().toISOString() });
+      }
+      throw error;
     });
   },
 };
+
+/**
+ * Reenvía un intento guardado con SU key (U4-T3, S9). No genera una nueva a
+ * propósito: esa es justamente la garantía de que no se duplique el pedido.
+ */
+export const reintentarCheckout = (
+  intento: IntentoPendiente
+): Promise<CheckoutResponseDTO> =>
+  apiFetch<CheckoutResponseDTO>("/checkout", {
+    method: "POST",
+    json: intento.payload,
+    headers: { "Idempotency-Key": intento.idempotencyKey },
+  });
 
 export { ApiError };

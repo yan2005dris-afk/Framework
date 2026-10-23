@@ -3,6 +3,9 @@ import { RouterProvider } from "@tanstack/react-router";
 import { AuthProvider } from "@/Context/AuthProvider";
 import { CartProvider } from "@/Context/CartProvider";
 import { useAuth } from "@/Context/useAuth";
+import { UpdateBanner } from "@/Components/Pwa/UpdateBanner";
+import { OfflineGuard } from "@/Components/Pwa/OfflineGuard";
+import { CheckoutRetryWatcher } from "@/Components/Pwa/CheckoutRetryWatcher";
 import { router } from "@/router";
 
 /**
@@ -55,6 +58,14 @@ const RouterBridge = () => {
 export const AppShell = () => (
   <AuthProvider>
     <CartBoundary>
+      {/* El banner va fuera del RouterBridge a proposito: ese componente se
+          reemplaza por el spinner mientras se hidrata la sesion, y el aviso de
+          actualizacion debe sobrevivir a ese estado (U4-T3). */}
+      <UpdateBanner />
+      {/* Cae a /offline en cuanto se pierde la conexion. */}
+      <OfflineGuard />
+      {/* Reintenta los checkouts que quedaron a medio enviar (U4-T3). */}
+      <CheckoutRetryWatcher />
       <RouterBridge />
     </CartBoundary>
   </AuthProvider>

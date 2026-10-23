@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"multicatalogo-backend/middleware"
@@ -18,16 +19,17 @@ import (
 type MockDatabaseRepository struct {
 	mu sync.Mutex
 
-	CrearPedidoCalls          []CrearPedidoCall
-	CrearPedidoFunc            func(usuarioID int, req models.CheckoutRequest) (*models.Pedido, error)
-	ActualizarComisionesFunc  func(usuarioID int, totalPedido float64) error
+	CrearPedidoCalls         []CrearPedidoCall
+	CrearPedidoFunc           func(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error)
+	ActualizarComisionesFunc func(usuarioID int, totalPedido float64) error
 }
 
 // CrearPedidoCall registra los argumentos con que se invocó CrearPedido, para que
 // los tests puedan afirmar que el controller pasó los valores esperados.
 type CrearPedidoCall struct {
-	UsuarioID     int
-	EmailRecibido string
+	UsuarioID      int
+	EmailRecibido  string
+	IdempotencyKey string
 }
 
 func (m *MockDatabaseRepository) BuscarUsuarioPorEmail(email string) (*models.Usuario, error) {
@@ -36,17 +38,18 @@ func (m *MockDatabaseRepository) BuscarUsuarioPorEmail(email string) (*models.Us
 func (m *MockDatabaseRepository) ObtenerProductos() ([]models.Producto, error)        { return nil, nil }
 func (m *MockDatabaseRepository) ObtenerProductoPorID(int) (*models.Producto, error)    { return nil, nil }
 func (m *MockDatabaseRepository) ObtenerRed() (*models.Referido, error)                 { return nil, nil }
-func (m *MockDatabaseRepository) CrearPedido(usuarioID int, req models.CheckoutRequest) (*models.Pedido, error) {
+func (m *MockDatabaseRepository) CrearPedido(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error) {
 	m.mu.Lock()
 	m.CrearPedidoCalls = append(m.CrearPedidoCalls, CrearPedidoCall{
-		UsuarioID:     usuarioID,
-		EmailRecibido: req.EmailCliente,
+		UsuarioID:      usuarioID,
+		EmailRecibido:  req.EmailCliente,
+		IdempotencyKey: idempotencyKey,
 	})
 	m.mu.Unlock()
 	if m.CrearPedidoFunc != nil {
-		return m.CrearPedidoFunc(usuarioID, req)
+		return m.CrearPedidoFunc(usuarioID, req, idempotencyKey)
 	}
-	return &models.Pedido{ID: 101, Total: 100}, nil
+	return &models.Pedido{ID: 101, Total: 100}, false, nil
 }
 func (m *MockDatabaseRepository) ActualizarComisiones(usuarioID int, totalPedido float64) error {
 	if m.ActualizarComisionesFunc != nil {
@@ -95,7 +98,7 @@ func newCheckoutApp(ctrl *CheckoutController, usuarioID int, email string) *fibe
 
 func TestCheckoutController_Exitoso(t *testing.T) {
 	mockDB := &MockDatabaseRepository{
-		CrearPedidoFunc: func(usuarioID int, req models.CheckoutRequest) (*models.Pedido, error) {
+		CrearPedidoFunc: func(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error) {
 			return &models.Pedido{
 				ID:            42,
 				UsuarioID:     usuarioID,
@@ -103,7 +106,7 @@ func TestCheckoutController_Exitoso(t *testing.T) {
 				EmailCliente:  req.EmailCliente,
 				Total:         75.5,
 				Estado:        "completado",
-			}, nil
+			}, false, nil
 		},
 	}
 	mockCache := &MockCacheRepository{}
@@ -141,8 +144,8 @@ func TestCheckoutController_Exitoso(t *testing.T) {
 
 func TestCheckoutController_FallaTransaccion(t *testing.T) {
 	mockDB := &MockDatabaseRepository{
-		CrearPedidoFunc: func(usuarioID int, req models.CheckoutRequest) (*models.Pedido, error) {
-			return nil, errors.New("falla transaccional forzada para rollback")
+		CrearPedidoFunc: func(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error) {
+			return nil, false, errors.New("falla transaccional forzada para rollback")
 		},
 	}
 	mockCache := &MockCacheRepository{}
@@ -177,8 +180,8 @@ func TestCheckoutController_FallaTransaccion(t *testing.T) {
 // comisiones siempre corresponden al usuario autenticado.
 func TestCheckoutController_EmailFalsoEnBody_SeSobrescribe(t *testing.T) {
 	mockDB := &MockDatabaseRepository{
-		CrearPedidoFunc: func(usuarioID int, req models.CheckoutRequest) (*models.Pedido, error) {
-			return &models.Pedido{ID: 99, Total: 100, UsuarioID: usuarioID, EmailCliente: req.EmailCliente}, nil
+		CrearPedidoFunc: func(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error) {
+			return &models.Pedido{ID: 99, Total: 100, UsuarioID: usuarioID, EmailCliente: req.EmailCliente}, false, nil
 		},
 	}
 	mockCache := &MockCacheRepository{}
@@ -280,8 +283,8 @@ func TestCheckoutController_CantidadNegativa_Retorna400(t *testing.T) {
 // invalida 'productos:all', 'red:tree' y la clave por email tras una compra exitosa.
 func TestCheckoutController_ProductosYRedCacheInvalidada(t *testing.T) {
 	mockDB := &MockDatabaseRepository{
-		CrearPedidoFunc: func(usuarioID int, req models.CheckoutRequest) (*models.Pedido, error) {
-			return &models.Pedido{ID: 100, Total: 50, UsuarioID: usuarioID}, nil
+		CrearPedidoFunc: func(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error) {
+			return &models.Pedido{ID: 100, Total: 50, UsuarioID: usuarioID}, false, nil
 		},
 	}
 	mockCache := &MockCacheRepository{}
@@ -322,5 +325,137 @@ func TestCheckoutController_ProductosYRedCacheInvalidada(t *testing.T) {
 		if !have[want] {
 			t.Errorf("se esperaba Del(%q) tras checkout, no se encontró. delKeys=%v", want, mockCache.delKeys)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// U4-T3 · S10: idempotencia del checkout
+//
+// El service worker nunca reintenta solo un POST, pero el cliente sí. Si el
+// primer intento llegó al servidor y solo se perdió la respuesta, el reintento
+// crearía un segundo pedido. Estos tests fijan el contrato que lo evita.
+// ---------------------------------------------------------------------------
+
+// El header `Idempotency-Key` tiene que llegar al repositorio tal cual: es la
+// clave con la que el repo decide entre crear el pedido y hacer replay.
+func TestCheckoutController_ReenviaLaIdempotencyKeyAlRepositorio(t *testing.T) {
+	mockDB := &MockDatabaseRepository{}
+	ctrl := NewCheckoutController(mockDB, &MockCacheRepository{}, "dev")
+	app := newCheckoutApp(ctrl, 3, "clave@upse.edu.ec")
+
+	const key = "9f2c1a7e-5b31-4c88-9a0d-6e1f2b3c4d5e"
+	body, _ := json.Marshal(models.CheckoutRequest{
+		NombreCliente: "Estudiante UPSE",
+		EmailCliente:  "estudiante@upse.edu.ec",
+		MetodoPago:    "Tarjeta de crédito",
+		Items:         []models.CheckoutItem{{ProductoID: 1, Cantidad: 1, Precio: 45.0}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/checkout", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", key)
+
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("Error al ejecutar petición de prueba: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("Se esperaba 201 con la key nueva, se obtuvo %d", resp.StatusCode)
+	}
+	if len(mockDB.CrearPedidoCalls) != 1 {
+		t.Fatalf("Se esperaba 1 llamada a CrearPedido, hubo %d", len(mockDB.CrearPedidoCalls))
+	}
+	if got := mockDB.CrearPedidoCalls[0].IdempotencyKey; got != key {
+		t.Errorf("La key que llegó al repo = %q, se esperaba %q", got, key)
+	}
+}
+
+// Sin el header, la key va vacía y el checkout se comporta como siempre. Es lo
+// que evita que un cliente viejo, o uno que no es una PWA, se rompa al desplegar.
+func TestCheckoutController_SinHeaderLaKeyVaVacia(t *testing.T) {
+	mockDB := &MockDatabaseRepository{}
+	ctrl := NewCheckoutController(mockDB, &MockCacheRepository{}, "dev")
+	app := newCheckoutApp(ctrl, 3, "sinho@upse.edu.ec")
+
+	body, _ := json.Marshal(models.CheckoutRequest{
+		NombreCliente: "Estudiante UPSE",
+		EmailCliente:  "sinho@upse.edu.ec",
+		MetodoPago:    "Tarjeta de crédito",
+		Items:         []models.CheckoutItem{{ProductoID: 1, Cantidad: 1, Precio: 45.0}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/checkout", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("Error al ejecutar petición de prueba: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("Se esperaba 201 sin header, se obtuvo %d", resp.StatusCode)
+	}
+	if got := mockDB.CrearPedidoCalls[0].IdempotencyKey; got != "" {
+		t.Errorf("Sin header la key debe ir vacía, llegó %q", got)
+	}
+}
+
+// Un replay (la key ya se usó, el repo devuelve el pedido original) tiene que:
+//   - responder 200 en vez de 201, para que el cliente no lo tome por un pedido nuevo;
+//   - NO volver a pedir las comisiones. Si las pidiera, el reintento duplicaría
+//     también las ventas de la red, que es el mismo bug un paso más abajo y
+//     bastante más difícil de detectar que un pedido repetido.
+func TestCheckoutController_ReplayResponde200YCobraUnaSolaComision(t *testing.T) {
+	// Canal con buffer: si el controller no llamara, la goroutine no se
+	// cuelga esperando a que alguien lea.
+	comisiones := make(chan float64, 1)
+
+	mockDB := &MockDatabaseRepository{
+		CrearPedidoFunc: func(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error) {
+			return &models.Pedido{ID: 42, Total: 75.5, UsuarioID: usuarioID}, true, nil
+		},
+		ActualizarComisionesFunc: func(_ int, totalPedido float64) error {
+			comisiones <- totalPedido
+			return nil
+		},
+	}
+	ctrl := NewCheckoutController(mockDB, &MockCacheRepository{}, "dev")
+	app := newCheckoutApp(ctrl, 3, "replay@upse.edu.ec")
+
+	body, _ := json.Marshal(models.CheckoutRequest{
+		NombreCliente: "Estudiante UPSE",
+		EmailCliente:  "replay@upse.edu.ec",
+		MetodoPago:    "Tarjeta de crédito",
+		Items:         []models.CheckoutItem{{ProductoID: 1, Cantidad: 1, Precio: 75.5}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/checkout", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "9f2c1a7e-5b31-4c88-9a0d-6e1f2b3c4d5e")
+
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("Error al ejecutar petición de prueba: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Un replay debe responder 200, se obtuvo %d", resp.StatusCode)
+	}
+
+	var respuesta models.CheckoutResponse
+	if err := json.NewDecoder(resp.Body).Decode(&respuesta); err != nil {
+		t.Fatalf("No se pudo leer la respuesta: %v", err)
+	}
+	if respuesta.PedidoID != 42 {
+		t.Errorf("El replay debe devolver el pedido original (42), devolvió %d", respuesta.PedidoID)
+	}
+
+	// El cobro de comisiones pasa por una goroutine. Le damos una ventana chica:
+	// si en 100ms no apareció, es que el controller no lo llamó.
+	select {
+	case total := <-comisiones:
+		t.Errorf("Un replay no debe volver a cobrar comisiones, cobró %v", total)
+	case <-time.After(100 * time.Millisecond):
 	}
 }
