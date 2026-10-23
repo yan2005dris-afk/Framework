@@ -1,3 +1,19 @@
+export interface RegisterRequest {
+  nombre: string;
+  email: string;
+  password: string;
+  ref?: string;
+}
+
+export interface RegisterResponse {
+  mensaje: string;
+  usuario: {
+    id: number;
+    email: string;
+    rol: string;
+  };
+}
+
 import type { Producto } from "../data/productos";
 import type { CheckoutRequestDTO, CheckoutResponseDTO } from "@/types/checkout";
 import { ApiError, NetworkError, apiFetch } from "./http";
@@ -33,6 +49,17 @@ export const api = {
    * Devuelve {email, rol, expires}. La cookie httpOnly llega en el header
    * Set-Cookie del response.
    */
+  /**
+   * POST /api/register
+   * Crea una nueva cuenta de cliente vinculada opcionalmente a un patrocinador MLM.
+   */
+  register(payload: RegisterRequest): Promise<RegisterResponse> {
+    return apiFetch<RegisterResponse>("/register", {
+      method: "POST",
+      json: payload,
+    });
+  },
+
   login(email: string, password: string, onUnauthorized?: () => void): Promise<LoginResponse> {
     return apiFetch<LoginResponse>("/login", {
       method: "POST",
