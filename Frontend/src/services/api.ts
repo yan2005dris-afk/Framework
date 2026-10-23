@@ -1,3 +1,38 @@
+export interface ComisionDTO {
+  id: number;
+  pedidoId: number;
+  referidoId: number;
+  nivel: number;
+  porcentaje: number;
+  monto: number;
+  estado: string;
+  liquidacionId?: number;
+  creadoEn: string;
+}
+
+export interface ResumenComisionesDTO {
+  referidoId: number;
+  totalPendiente: number;
+  totalPagado: number;
+  comisiones: ComisionDTO[];
+}
+
+export interface LiquidacionDTO {
+  id: number;
+  referidoId: number;
+  total: number;
+  estado: string;
+  creadoEn: string;
+  pagadaEn: string;
+}
+
+export interface DeudaDistribuidorDTO {
+  referidoId: number;
+  nombre: string;
+  totalPendiente: number;
+  numeroComisiones: number;
+}
+
 export interface PedidoItemDetalleDTO {
   id: number;
   pedidoId: number;
@@ -233,6 +268,49 @@ export const api = {
     return apiFetch<{ mensaje: string; estado: string }>(`/pedidos/${id}/estado`, {
       method: "PATCH",
       json: { estado: nuevoEstado },
+    });
+  },
+
+  /**
+   * GET /api/comisiones/mias
+   * Ledger de comisiones y saldo pendiente del usuario autenticado.
+   */
+  getComisionesMias(): Promise<ResumenComisionesDTO> {
+    return apiFetch<ResumenComisionesDTO>("/comisiones/mias", { method: "GET" });
+  },
+
+  /**
+   * GET /api/liquidaciones/mias
+   * Historial de pagos liquidados al usuario actual.
+   */
+  getLiquidacionesMias(): Promise<{ liquidaciones: LiquidacionDTO[] }> {
+    return apiFetch<{ liquidaciones: LiquidacionDTO[] }>("/liquidaciones/mias", { method: "GET" });
+  },
+
+  /**
+   * GET /api/liquidaciones
+   * Historial de todas las liquidaciones (admin).
+   */
+  getLiquidacionesAdmin(): Promise<{ liquidaciones: LiquidacionDTO[] }> {
+    return apiFetch<{ liquidaciones: LiquidacionDTO[] }>("/liquidaciones", { method: "GET" });
+  },
+
+  /**
+   * GET /api/reportes/comisiones-pendientes
+   * Deuda por distribuidor pendiente de liquidar (admin).
+   */
+  getComisionesPendientes(): Promise<{ data: DeudaDistribuidorDTO[] }> {
+    return apiFetch<{ data: DeudaDistribuidorDTO[] }>("/reportes/comisiones-pendientes", { method: "GET" });
+  },
+
+  /**
+   * POST /api/liquidaciones
+   * Liquidar comisiones pendientes de un distribuidor (admin).
+   */
+  liquidarComisiones(referidoId: number): Promise<{ mensaje: string; liquidacion: LiquidacionDTO }> {
+    return apiFetch<{ mensaje: string; liquidacion: LiquidacionDTO }>("/liquidaciones", {
+      method: "POST",
+      json: { referidoId },
     });
   },
 
