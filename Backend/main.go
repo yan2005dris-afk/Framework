@@ -75,6 +75,7 @@ func main() {
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, appEnv)
 	healthCtrl := controllers.NewHealthController(dbPool, redisClient)
 	liqCtrl := controllers.NewLiquidacionController(dbRepo, appEnv)
+	pedCtrl := controllers.NewPedidoController(dbRepo, appEnv)
 
 	app := fiber.New()
 
@@ -95,7 +96,7 @@ func main() {
 	}))
 
 	// Registramos las rutas inyectando los controladores
-	routes.SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl, healthCtrl, liqCtrl, dbRepo, jwtSecret)
+	routes.SetupRoutes(app, authCtrl, prodCtrl, redCtrl, checkoutCtrl, healthCtrl, liqCtrl, pedCtrl, dbRepo, jwtSecret)
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -43,6 +43,10 @@ func (s *stubDBRepo) CrearPedido(int, models.CheckoutRequest, string) (*models.P
 	return nil, false, nil
 }
 func (s *stubDBRepo) ActualizarComisiones(int, float64) error { return nil }
+func (s *stubDBRepo) ListarPedidosMios(int, int, int) ([]models.Pedido, error) { return nil, nil }
+func (s *stubDBRepo) ListarPedidosAdmin(string, int, int) ([]models.Pedido, error) { return nil, nil }
+func (s *stubDBRepo) ObtenerPedidoDetalle(int) (*models.PedidoConDetalle, error) { return nil, nil }
+func (s *stubDBRepo) ActualizarEstadoPedido(int, string) error { return nil }
 func (s *stubDBRepo) RegistrarComisionesPedido(int, int, float64) ([]models.Comision, error) { return nil, nil }
 func (s *stubDBRepo) ObtenerComisionesPorReferido(int) (*models.ResumenComisiones, error) { return nil, nil }
 func (s *stubDBRepo) LiquidarComisiones(int) (*models.Liquidacion, error) { return nil, nil }

@@ -18,6 +18,10 @@ type DatabaseRepository interface {
 	ObtenerRed() (*models.Referido, error)
 	// CrearPedido registra el pedido en una transacción ACID.
 	CrearPedido(usuarioID int, req models.CheckoutRequest, idempotencyKey string) (*models.Pedido, bool, error)
+	ListarPedidosMios(usuarioID int, limit, offset int) ([]models.Pedido, error)
+	ListarPedidosAdmin(estado string, limit, offset int) ([]models.Pedido, error)
+	ObtenerPedidoDetalle(id int) (*models.PedidoConDetalle, error)
+	ActualizarEstadoPedido(id int, nuevoEstado string) error
 	ActualizarComisiones(usuarioID int, totalPedido float64) error
 
 	// Métodos para Ledger de Comisiones y Liquidaciones

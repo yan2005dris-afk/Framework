@@ -880,3 +880,218 @@ func (r *PostgresRepository) EliminarProductoLogico(id int) error {
 	}
 	return nil
 }
+
+// ListarPedidosMios consulta los pedidos del usuario autenticado de forma paginada.
+func (r *PostgresRepository) ListarPedidosMios(usuarioID int, limit, offset int) ([]models.Pedido, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if limit <= 0 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
+		FROM pedidos
+		WHERE usuario_id = $1
+		ORDER BY id DESC
+		LIMIT $2 OFFSET $3
+	`, usuarioID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("error al listar pedidos de usuario: %w", err)
+	}
+	defer rows.Close()
+
+	pedidos := make([]models.Pedido, 0)
+	for rows.Next() {
+		var p models.Pedido
+		var cAt time.Time
+		if err := rows.Scan(&p.ID, &p.UsuarioID, &p.NombreCliente, &p.EmailCliente, &p.MetodoPago, &p.Total, &p.Estado, &cAt); err != nil {
+			return nil, err
+		}
+		p.CreadoAt = cAt.Format(time.RFC3339)
+		pedidos = append(pedidos, p)
+	}
+	return pedidos, nil
+}
+
+// ListarPedidosAdmin consulta todos los pedidos del sistema con filtro opcional por estado.
+func (r *PostgresRepository) ListarPedidosAdmin(estado string, limit, offset int) ([]models.Pedido, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var rows pgx.Rows
+	if estado != "" {
+		rows, err = pool.Query(ctx, `
+			SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
+			FROM pedidos
+			WHERE estado = $1
+			ORDER BY id DESC
+			LIMIT $2 OFFSET $3
+		`, estado, limit, offset)
+	} else {
+		rows, err = pool.Query(ctx, `
+			SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
+			FROM pedidos
+			ORDER BY id DESC
+			LIMIT $1 OFFSET $2
+		`, limit, offset)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error al listar pedidos admin: %w", err)
+	}
+	defer rows.Close()
+
+	pedidos := make([]models.Pedido, 0)
+	for rows.Next() {
+		var p models.Pedido
+		var cAt time.Time
+		if err := rows.Scan(&p.ID, &p.UsuarioID, &p.NombreCliente, &p.EmailCliente, &p.MetodoPago, &p.Total, &p.Estado, &cAt); err != nil {
+			return nil, err
+		}
+		p.CreadoAt = cAt.Format(time.RFC3339)
+		pedidos = append(pedidos, p)
+	}
+	return pedidos, nil
+}
+
+// ObtenerPedidoDetalle obtiene la cabecera y el detalle de ítems de un pedido con JOIN a productos.
+func (r *PostgresRepository) ObtenerPedidoDetalle(id int) (*models.PedidoConDetalle, error) {
+	pool, err := r.getPool()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var p models.PedidoConDetalle
+	var cAt time.Time
+	err = pool.QueryRow(ctx, `
+		SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
+		FROM pedidos WHERE id = $1
+	`, id).Scan(&p.ID, &p.UsuarioID, &p.NombreCliente, &p.EmailCliente, &p.MetodoPago, &p.Total, &p.Estado, &cAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("error al consultar cabecera de pedido: %w", err)
+	}
+	p.CreadoAt = cAt.Format(time.RFC3339)
+
+	rows, err := pool.Query(ctx, `
+		SELECT pi.id, pi.pedido_id, pi.producto_id, COALESCE(pr.nombre, 'Producto eliminado'), 
+		       COALESCE(pr.img, ''), pi.cantidad, pi.precio_unitario, pi.subtotal
+		FROM pedido_items pi
+		LEFT JOIN productos pr ON pi.producto_id = pr.id
+		WHERE pi.pedido_id = $1
+		ORDER BY pi.id ASC
+	`, id)
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar items de pedido: %w", err)
+	}
+	defer rows.Close()
+
+	p.Items = make([]models.PedidoDetalleItem, 0)
+	for rows.Next() {
+		var item models.PedidoDetalleItem
+		if err := rows.Scan(&item.ID, &item.PedidoID, &item.ProductoID, &item.NombreProducto, &item.ImgProducto, &item.Cantidad, &item.PrecioUnitario, &item.Subtotal); err != nil {
+			return nil, err
+		}
+		p.Items = append(p.Items, item)
+	}
+
+	return &p, nil
+}
+
+// ActualizarEstadoPedido modifica el estado del pedido. Si el nuevo estado es 'cancelado',
+// restaura de forma atómica el stock de los productos comprados y marca las comisiones como 'revertida'.
+func (r *PostgresRepository) ActualizarEstadoPedido(id int, nuevoEstado string) error {
+	pool, err := r.getPool()
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("error al iniciar transacción: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var estadoActual string
+	err = tx.QueryRow(ctx, `SELECT estado FROM pedidos WHERE id = $1 FOR UPDATE`, id).Scan(&estadoActual)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("error al consultar estado de pedido: %w", err)
+	}
+
+	if estadoActual == "cancelado" {
+		return errors.New("el pedido ya se encuentra cancelado")
+	}
+
+	// Si se cancela, restaurar stock de cada producto y revertir comisiones devengadas
+	if nuevoEstado == "cancelado" {
+		rows, err := tx.Query(ctx, `SELECT producto_id, cantidad FROM pedido_items WHERE pedido_id = $1`, id)
+		if err != nil {
+			return fmt.Errorf("error al leer items para devolver stock: %w", err)
+		}
+		type itemDevolucion struct {
+			prodID int
+			cant   int
+		}
+		var items []itemDevolucion
+		for rows.Next() {
+			var it itemDevolucion
+			if err := rows.Scan(&it.prodID, &it.cant); err == nil {
+				items = append(items, it)
+			}
+		}
+		rows.Close()
+
+		for _, it := range items {
+			_, err = tx.Exec(ctx, `UPDATE productos SET stock = stock + $1 WHERE id = $2`, it.cant, it.prodID)
+			if err != nil {
+				return fmt.Errorf("error al restaurar stock de producto %d: %w", it.prodID, err)
+			}
+		}
+
+		// Revertir comisiones devengadas
+		_, _ = tx.Exec(ctx, `UPDATE comisiones SET estado = 'revertida' WHERE pedido_id = $1 AND estado = 'pendiente'`, id)
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE pedidos SET estado = $1 WHERE id = $2`, nuevoEstado, id)
+	if err != nil {
+		return fmt.Errorf("error al actualizar estado de pedido: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("error al confirmar cambio de estado: %w", err)
+	}
+
+	return nil
+}

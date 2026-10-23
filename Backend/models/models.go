@@ -178,3 +178,26 @@ type Liquidacion struct {
 type LiquidarRequest struct {
 	ReferidoID int `json:"referidoId"`
 }
+
+// PedidoDetalleItem representa el desglose de un producto dentro del detalle de un pedido.
+type PedidoDetalleItem struct {
+	ID             int     `json:"id"`
+	PedidoID       int     `json:"pedidoId"`
+	ProductoID     int     `json:"productoId"`
+	NombreProducto string  `json:"nombreProducto"`
+	ImgProducto    string  `json:"imgProducto"`
+	Cantidad       int     `json:"cantidad"`
+	PrecioUnitario float64 `json:"precioUnitario"`
+	Subtotal       float64 `json:"subtotal"`
+}
+
+// PedidoConDetalle representa la cabecera completa con todos sus items relacionados.
+type PedidoConDetalle struct {
+	Pedido
+	Items []PedidoDetalleItem `json:"items"`
+}
+
+// ActualizarEstadoPedidoRequest define el payload para transicionar el estado de un pedido.
+type ActualizarEstadoPedidoRequest struct {
+	Estado string `json:"estado"`
+}
