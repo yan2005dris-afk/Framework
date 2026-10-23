@@ -58,7 +58,7 @@ func TestAuthController_Login_ProxyaYDevuelveCookie(t *testing.T) {
 		MaxAge:   7200,
 	}}
 
-	ctrl := NewAuthController(fake.server.URL)
+	ctrl := NewAuthController(fake.server.URL, nil, "dev")
 	app := fiber.New()
 	app.Post("/api/login", ctrl.Login)
 
@@ -112,7 +112,7 @@ func TestAuthController_Login_ProxyaYDevuelveCookie(t *testing.T) {
 
 func TestAuthController_Login_400CuandoCuerpoFalta(t *testing.T) {
 	fake := newFakeAuthService(t)
-	ctrl := NewAuthController(fake.server.URL)
+	ctrl := NewAuthController(fake.server.URL, nil, "dev")
 	app := fiber.New()
 	app.Post("/api/login", ctrl.Login)
 
@@ -138,7 +138,7 @@ func TestAuthController_Login_NoPropagaCookieSiUpstreamFalla(t *testing.T) {
 	fake.respStatus = http.StatusUnauthorized
 	fake.respBody = `{"error":"Credenciales incorrectas"}`
 	fake.respCookies = nil
-	ctrl := NewAuthController(fake.server.URL)
+	ctrl := NewAuthController(fake.server.URL, nil, "dev")
 	app := fiber.New()
 	app.Post("/api/login", ctrl.Login)
 
@@ -172,7 +172,7 @@ func TestAuthController_Logout_ProxyaYDevuelveMaxAgeNegativo(t *testing.T) {
 		MaxAge: -1,
 	}}
 
-	ctrl := NewAuthController(fake.server.URL)
+	ctrl := NewAuthController(fake.server.URL, nil, "dev")
 	app := fiber.New()
 	app.Post("/api/logout", ctrl.Logout)
 
@@ -193,7 +193,7 @@ func TestAuthController_Logout_ProxyaYDevuelveMaxAgeNegativo(t *testing.T) {
 }
 
 func TestAuthController_Me_ConLocals(t *testing.T) {
-	ctrl := NewAuthController("http://127.0.0.1:1") // Nunca se llama en Me().
+	ctrl := NewAuthController("http://127.0.0.1:1", nil, "dev") // Nunca se llama en Me().
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
 		c.Locals(middleware.LocalEmail, "admin@upse.edu.ec")
@@ -221,7 +221,7 @@ func TestAuthController_Me_ConLocals(t *testing.T) {
 }
 
 func TestAuthController_Me_SinLocals(t *testing.T) {
-	ctrl := NewAuthController("http://127.0.0.1:1")
+	ctrl := NewAuthController("http://127.0.0.1:1", nil, "dev")
 	app := fiber.New()
 	app.Get("/api/me", ctrl.Me)
 
@@ -234,7 +234,7 @@ func TestAuthController_Me_SinLocals(t *testing.T) {
 
 func TestAuthController_Login_502SiUpstreamNoResponde(t *testing.T) {
 	// URL de un puerto que no escucha.
-	ctrl := NewAuthController("http://127.0.0.1:1")
+	ctrl := NewAuthController("http://127.0.0.1:1", nil, "dev")
 	app := fiber.New()
 	app.Post("/api/login", ctrl.Login)
 
