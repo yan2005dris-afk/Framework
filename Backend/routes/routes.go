@@ -26,14 +26,6 @@ func SetupRoutes(
 	// Estado del servidor (público; hace ping real a PG y Redis)
 	api.Get("/health", healthCtrl.Health)
 
-	// Catálogo de Productos (público)
-	api.Get("/productos", prodCtrl.GetProductos)
-	api.Get("/productos/:id", prodCtrl.GetProductoByID)
-
-	// Autenticación (pública)
-	api.Post("/login", authCtrl.Login)
-	api.Post("/logout", authCtrl.Logout)
-
 	// Middleware de proteccion con JWT. Lee el token desde el header
 	// `Authorization: Bearer <jwt>` (override) o desde la cookie httpOnly
 	// `auth_token` (caso normal del flujo SPA). Setea c.Locals con email,
@@ -42,6 +34,20 @@ func SetupRoutes(
 		JWTSecret: []byte(jwtSecret),
 		DBRepo:    dbRepo,
 	})
+
+	// Catálogo de Productos (público)
+	api.Get("/productos", prodCtrl.GetProductos)
+	api.Get("/productos/:id", prodCtrl.GetProductoByID)
+
+	// Administración de Productos (Fase 2, protegido admin)
+	api.Get("/admin/productos", requireAuth, prodCtrl.GetProductosAdmin)
+	api.Post("/productos", requireAuth, prodCtrl.CrearProducto)
+	api.Put("/productos/:id", requireAuth, prodCtrl.ActualizarProducto)
+	api.Delete("/productos/:id", requireAuth, prodCtrl.EliminarProducto)
+
+	// Autenticación (pública)
+	api.Post("/login", authCtrl.Login)
+	api.Post("/logout", authCtrl.Logout)
 
 	// Hidratación de sesión desde cookie httpOnly (protegido).
 	// El frontend lo llama al montar la app para saber si hay sesión activa

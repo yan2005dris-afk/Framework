@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"multicatalogo-backend/controllers/helpers"
+	"multicatalogo-backend/middleware"
 	"multicatalogo-backend/models"
 	"multicatalogo-backend/repository"
 )
@@ -104,4 +105,120 @@ func GetProductos(c *fiber.Ctx) error {
 func GetProductoByID(c *fiber.Ctx) error {
 	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{}, "dev")
 	return ctrl.GetProductoByID(c)
+}
+
+// GetProductosAdmin retorna todos los productos incluidos inactivos (Solo Admin).
+func (pc *ProductoController) GetProductosAdmin(c *fiber.Ctx) error {
+	rol, ok := c.Locals(middleware.LocalRol).(string)
+	if !ok || rol != "admin" {
+		return models.APIError{Status: fiber.StatusForbidden, Error: "Se requieren permisos de administrador"}.Write(c)
+	}
+
+	productos, err := pc.dbRepo.ObtenerProductosAdmin()
+	if err != nil {
+		public, detail := helpers.SanitizeErrorDetails(pc.appEnv, err)
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: public, Detalle: detail}.Write(c)
+	}
+
+	return c.JSON(productos)
+}
+
+// CrearProducto da de alta un nuevo producto y limpia la caché (Solo Admin).
+func (pc *ProductoController) CrearProducto(c *fiber.Ctx) error {
+	rol, ok := c.Locals(middleware.LocalRol).(string)
+	if !ok || rol != "admin" {
+		return models.APIError{Status: fiber.StatusForbidden, Error: "Se requieren permisos de administrador"}.Write(c)
+	}
+
+	var req models.ProductoRequest
+	if err := c.BodyParser(&req); err != nil {
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "Cuerpo de petición inválido"}.Write(c)
+	}
+
+	if req.Nombre == "" || req.Precio <= 0 || req.Categoria == "" {
+		return models.APIError{
+			Status:  fiber.StatusBadRequest,
+			Error:   "Validación fallida",
+			Detalle: "Los campos nombre, categoria y precio (> 0) son obligatorios",
+		}.Write(c)
+	}
+
+	producto, err := pc.dbRepo.CrearProducto(req)
+	if err != nil {
+		public, detail := helpers.SanitizeErrorDetails(pc.appEnv, err)
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: public, Detalle: detail}.Write(c)
+	}
+
+	// Invalidar caché de catálogo
+	if pc.cacheRepo != nil {
+		_ = pc.cacheRepo.Del("productos:all")
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(producto)
+}
+
+// ActualizarProducto edita campos de un producto existente y limpia la caché (Solo Admin).
+func (pc *ProductoController) ActualizarProducto(c *fiber.Ctx) error {
+	rol, ok := c.Locals(middleware.LocalRol).(string)
+	if !ok || rol != "admin" {
+		return models.APIError{Status: fiber.StatusForbidden, Error: "Se requieren permisos de administrador"}.Write(c)
+	}
+
+	idParam := c.Params("id")
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "El ID del producto debe ser numérico"}.Write(c)
+	}
+
+	var req models.ProductoRequest
+	if err := c.BodyParser(&req); err != nil {
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "Cuerpo de petición inválido"}.Write(c)
+	}
+
+	producto, err := pc.dbRepo.ActualizarProducto(id, req)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return models.APIError{Status: fiber.StatusNotFound, Error: "Producto no encontrado"}.Write(c)
+		}
+		public, detail := helpers.SanitizeErrorDetails(pc.appEnv, err)
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: public, Detalle: detail}.Write(c)
+	}
+
+	// Invalidar caché de catálogo
+	if pc.cacheRepo != nil {
+		_ = pc.cacheRepo.Del("productos:all")
+	}
+
+	return c.JSON(producto)
+}
+
+// EliminarProducto realiza borrado lógico (activo=false) y limpia la caché (Solo Admin).
+func (pc *ProductoController) EliminarProducto(c *fiber.Ctx) error {
+	rol, ok := c.Locals(middleware.LocalRol).(string)
+	if !ok || rol != "admin" {
+		return models.APIError{Status: fiber.StatusForbidden, Error: "Se requieren permisos de administrador"}.Write(c)
+	}
+
+	idParam := c.Params("id")
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		return models.APIError{Status: fiber.StatusBadRequest, Error: "El ID del producto debe ser numérico"}.Write(c)
+	}
+
+	if err := pc.dbRepo.EliminarProductoLogico(id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return models.APIError{Status: fiber.StatusNotFound, Error: "Producto no encontrado"}.Write(c)
+		}
+		public, detail := helpers.SanitizeErrorDetails(pc.appEnv, err)
+		return models.APIError{Status: fiber.StatusInternalServerError, Error: public, Detalle: detail}.Write(c)
+	}
+
+	// Invalidar caché de catálogo
+	if pc.cacheRepo != nil {
+		_ = pc.cacheRepo.Del("productos:all")
+	}
+
+	return c.JSON(fiber.Map{
+		"mensaje": "Producto desactivado exitosamente",
+	})
 }

@@ -26,6 +26,20 @@ type Producto struct {
 	Categoria   string   `json:"categoria"`
 	Img         string   `json:"img"`
 	Galeria     []string `json:"galeria"`
+	Activo      bool     `json:"activo"`
+	Stock       int      `json:"stock"`
+}
+
+// ProductoRequest representa el payload para crear o editar un producto por admin.
+type ProductoRequest struct {
+	Nombre      string   `json:"nombre"`
+	Descripcion string   `json:"descripcion"`
+	Precio      float64  `json:"precio"`
+	Categoria   string   `json:"categoria"`
+	Img         string   `json:"img"`
+	Galeria     []string `json:"galeria"`
+	Stock       *int     `json:"stock,omitempty"`
+	Activo      *bool    `json:"activo,omitempty"`
 }
 
 // APIError estandariza los mensajes de error HTTP de la API.
