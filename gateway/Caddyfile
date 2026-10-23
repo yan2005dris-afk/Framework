@@ -136,10 +136,11 @@
         file_server
     }
 
-    # Logging estructurado (JSON-ish con timestamp).
+    # Logging estructurado (#21). Sin `format console`: el default de Caddy ya
+    # es JSON, que es lo que necesita el agregador. `console` existe para leer
+    # a ojo en desarrollo, pero rompe el parseo en produccion.
     log {
         output stdout
         level INFO
-        format console
     }
 }
