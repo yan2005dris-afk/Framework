@@ -4,6 +4,16 @@ import {
   type DeudaDistribuidorDTO,
   type LiquidacionDTO,
 } from "../../services/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { AlertCircle, CheckCircle2, DollarSign, Loader2 } from "lucide-react";
 
 export const AdminLiquidaciones = () => {
   const [deudas, setDeudas] = useState<DeudaDistribuidorDTO[]>([]);
@@ -11,6 +21,16 @@ export const AdminLiquidaciones = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [liquidandoId, setLiquidandoId] = useState<number | null>(null);
+
+  // Modal confirmación y éxito
+  const [selectedDeuda, setSelectedDeuda] = useState<DeudaDistribuidorDTO | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
+  const [modalFeedback, setModalFeedback] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    isError?: boolean;
+  }>({ open: false, title: "", description: "" });
 
   const cargarDatos = async () => {
     try {
@@ -37,22 +57,35 @@ export const AdminLiquidaciones = () => {
     cargarDatos();
   }, []);
 
-  const handleLiquidar = async (d: DeudaDistribuidorDTO) => {
-    if (
-      !confirm(
-        `¿Confirmas la liquidación de $${d.totalPendiente.toFixed(2)} para ${d.nombre}? Las comisiones se marcarán como pagadas.`
-      )
-    ) {
-      return;
-    }
+  const handleOpenConfirm = (d: DeudaDistribuidorDTO) => {
+    setSelectedDeuda(d);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmarLiquidacion = async () => {
+    if (!selectedDeuda) return;
+    const target = selectedDeuda;
 
     try {
-      setLiquidandoId(d.referidoId);
-      const res = await api.liquidarComisiones(d.referidoId);
-      alert(`¡${res.mensaje}! Liquidación N° ${res.liquidacion.id} generada.`);
+      setLiquidandoId(target.referidoId);
+      const res = await api.liquidarComisiones(target.referidoId);
+      setConfirmOpen(false);
+      setSelectedDeuda(null);
+      setModalFeedback({
+        open: true,
+        title: "¡Liquidación Exitosa!",
+        description: `${res.mensaje}. Se generó la liquidación N° ${res.liquidacion.id} por un total de $${res.liquidacion.total.toFixed(2)}.`,
+        isError: false,
+      });
       await cargarDatos();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Error al procesar liquidación");
+      setConfirmOpen(false);
+      setModalFeedback({
+        open: true,
+        title: "Error al Liquidar",
+        description: err instanceof Error ? err.message : "Error al procesar la liquidación.",
+        isError: true,
+      });
     } finally {
       setLiquidandoId(null);
     }
@@ -133,13 +166,21 @@ export const AdminLiquidaciones = () => {
                       ${d.totalPendiente.toFixed(2)}
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => handleLiquidar(d)}
+                      <Button
+                        size="sm"
+                        onClick={() => handleOpenConfirm(d)}
                         disabled={liquidandoId === d.referidoId}
-                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition min-h-[36px]"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs"
                       >
-                        {liquidandoId === d.referidoId ? "Procesando..." : "Liquidar Pago"}
-                      </button>
+                        {liquidandoId === d.referidoId ? (
+                          <>
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            Procesando...
+                          </>
+                        ) : (
+                          "Liquidar Pago"
+                        )}
+                      </Button>
                     </td>
                   </tr>
                 ))
@@ -209,6 +250,110 @@ export const AdminLiquidaciones = () => {
           </table>
         </div>
       </div>
+
+      {/* Modal Shadcn para Confirmar Liquidación */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 mb-2">
+              <DollarSign className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-center text-lg font-bold text-slate-900">
+              Confirmar Liquidación de Comisiones
+            </DialogTitle>
+            <DialogDescription className="text-center text-slate-500 text-sm">
+              Esta acción consolidará las comisiones pendientes y las marcará como pagadas.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedDeuda && (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2.5 my-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Distribuidor:</span>
+                <span className="font-semibold text-slate-900">{selectedDeuda.nombre}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">ID Referido:</span>
+                <span className="text-slate-700 font-mono text-xs">{selectedDeuda.referidoId}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Comisiones acumuladas:</span>
+                <span className="font-medium text-slate-700">{selectedDeuda.numeroComisiones} órdenes</span>
+              </div>
+              <div className="border-t border-slate-200 pt-2 flex justify-between items-center">
+                <span className="font-semibold text-slate-900 text-sm">Monto total a liquidar:</span>
+                <span className="font-bold text-green-600 text-lg">
+                  ${selectedDeuda.totalPendiente.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+              disabled={liquidandoId !== null}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              onClick={handleConfirmarLiquidacion}
+              disabled={liquidandoId !== null}
+            >
+              {liquidandoId !== null ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Procesando pago...
+                </>
+              ) : (
+                "Confirmar y Pagar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Shadcn para Resultado / Notificación */}
+      <Dialog
+        open={modalFeedback.open}
+        onOpenChange={(open) => setModalFeedback((prev) => ({ ...prev, open }))}
+      >
+        <DialogContent className="sm:max-w-sm text-center">
+          <DialogHeader>
+            <div
+              className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full mb-2 ${
+                modalFeedback.isError
+                  ? "bg-red-100 text-red-600"
+                  : "bg-emerald-100 text-emerald-600"
+              }`}
+            >
+              {modalFeedback.isError ? (
+                <AlertCircle className="h-6 w-6" />
+              ) : (
+                <CheckCircle2 className="h-6 w-6" />
+              )}
+            </div>
+            <DialogTitle className="text-center text-lg font-bold text-slate-900">
+              {modalFeedback.title}
+            </DialogTitle>
+            <DialogDescription className="text-center text-slate-600 text-sm mt-1">
+              {modalFeedback.description}
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="sm:justify-center mt-2">
+            <Button
+              className="w-full sm:w-auto min-w-[120px]"
+              variant={modalFeedback.isError ? "destructive" : "default"}
+              onClick={() => setModalFeedback((prev) => ({ ...prev, open: false }))}
+            >
+              Entendido
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
