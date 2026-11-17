@@ -86,7 +86,7 @@ func SetupRoutes(
 // por defecto, útil para tests que no requieren BD real.
 func SetupDefaultRoutes(app *fiber.App) {
 	dbRepo := &repository.PostgresRepository{}
-	cacheRepo := &repository.RedisCacheRepository{}
+	cacheRepo := &repository.ValkeyCacheRepository{}
 
 	// Tests sin auth-service: el proxy devuelve 502 BadGateway porque no hay
 	// URL arriba; suficiente para validar que el handler existe y responde.

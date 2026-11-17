@@ -98,12 +98,12 @@ func (pc *ProductoController) GetProductoByID(c *fiber.Ctx) error {
 
 // Funciones globales para compatibilidad hacia atrás
 func GetProductos(c *fiber.Ctx) error {
-	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{}, "dev")
+	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.ValkeyCacheRepository{}, "dev")
 	return ctrl.GetProductos(c)
 }
 
 func GetProductoByID(c *fiber.Ctx) error {
-	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{}, "dev")
+	ctrl := NewProductoController(&repository.PostgresRepository{}, &repository.ValkeyCacheRepository{}, "dev")
 	return ctrl.GetProductoByID(c)
 }
 

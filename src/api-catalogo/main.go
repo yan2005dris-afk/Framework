@@ -23,17 +23,17 @@ func main() {
 		defer config.CloseDB()
 	}
 
-	// Conexión a Redis
-	redisClient, err := config.ConnectRedis()
+	// Conexión a Valkey (Singleton)
+	valkeyClient, err := config.GetValkeyClient()
 	if err != nil {
-		log.Printf("⚠️ Advertencia: No se pudo conectar a Redis: %v", err)
+		log.Printf("⚠️ Advertencia: No se pudo conectar a Valkey: %v", err)
 	} else {
-		defer config.CloseRedis()
+		defer config.CloseValkey()
 	}
 
 	// Instanciación de repositorios (Inyección de Dependencias)
 	dbRepo := repository.NewPostgresRepository(dbPool)
-	cacheRepo := repository.NewRedisCacheRepository(redisClient)
+	cacheRepo := repository.NewValkeyCacheRepository(valkeyClient)
 
 	// Variables de entorno de seguridad (U2-T4 + GA5).
 	// Post-GA5 el Backend NO firma JWTs localmente, pero igual valida
@@ -73,7 +73,7 @@ func main() {
 	prodCtrl := controllers.NewProductoController(dbRepo, cacheRepo, appEnv)
 	redCtrl := controllers.NewRedController(dbRepo, cacheRepo, appEnv)
 	checkoutCtrl := controllers.NewCheckoutController(dbRepo, cacheRepo, appEnv)
-	healthCtrl := controllers.NewHealthController(dbPool, redisClient)
+	healthCtrl := controllers.NewHealthController(dbPool, valkeyClient)
 	liqCtrl := controllers.NewLiquidacionController(dbRepo, appEnv)
 	pedCtrl := controllers.NewPedidoController(dbRepo, appEnv)
 	repCtrl := controllers.NewReporteController(dbRepo, appEnv)
