@@ -32,10 +32,10 @@ WORKDIR /build/Frontend
 # todo el codigo. Notese que NO se copia src/routeTree.gen.ts (esta en
 # .gitignore y el .dockerignore de la raiz lo excluye): lo crea `tsr generate`
 # dentro de `pnpm build`, asi que la imagen nunca depende del estado del host.
-COPY src/Frontend/package.json src/Frontend/pnpm-lock.yaml ./
+COPY src/frontend/package.json src/frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-COPY src/Frontend/ ./
+COPY src/frontend/ ./
 RUN pnpm build
 
 # --- Stage 2: build de Caddy con modulos --------------------------------------
@@ -60,7 +60,7 @@ COPY --from=caddy /usr/bin/caddy /usr/bin/caddy
 # Tambien soportamos /etc/caddy/Caddyfile para volumenes custom.
 # Contexto de build = raiz del repo (ver docker-compose.yml), asi que el
 # Caddyfile se copia con su ruta real desde la raiz.
-COPY src/gateway/Caddyfile /etc/caddy/Caddyfile
+COPY src/api-gateway/Caddyfile /etc/caddy/Caddyfile
 
 # El SPA compilado en el stage anterior. `root * /srv/frontend` + `try_files`
 # en el Caddyfile sirven `/` y hacen fallback a index.html para las rutas de

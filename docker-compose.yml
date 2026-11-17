@@ -55,7 +55,7 @@ services:
       - db_data:/var/lib/postgresql/data
       # init.sql del Backend se monta como docker-entrypoint-initdb.d.
       # Solo se ejecuta la primera vez (cuando el volumen esta vacio).
-      - ./src/Backend/database/init.sql:/docker-entrypoint-initdb.d/01-backend-init.sql:ro
+      - ./src/api-catalogo/database/init.sql:/docker-entrypoint-initdb.d/01-backend-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-multicatalogo}"]
       interval: 5s
@@ -80,7 +80,7 @@ services:
 
   auth-service:
     build:
-      context: ./src/auth-service
+      context: ./src/api-auth
     container_name: multicatalogo-auth-service
     restart: unless-stopped
     depends_on:
@@ -101,7 +101,7 @@ services:
 
   backend:
     build:
-      context: ./src/Backend
+      context: ./src/api-catalogo
     container_name: multicatalogo-backend
     restart: unless-stopped
     depends_on:
@@ -132,7 +132,7 @@ services:
     build:
       # El directorio se renombro de Unidad3_SaaS a fastAPI_SaaS (PR #29);
       # con el path viejo el build fallaba.
-      context: ./src/fastAPI_SaaS
+      context: ./src/api-saas
     container_name: multicatalogo-saas-api
     restart: unless-stopped
     depends_on:
@@ -174,10 +174,10 @@ services:
   gateway:
     build:
       # Contexto en la RAIZ porque gateway/Dockerfile es multistage: compila
-      # Frontend/ con node+pnpm y copia el dist a la imagen final de Caddy.
+      # frontend con node+pnpm y copia el dist a la imagen final de Caddy.
       # El .dockerignore de la raiz evita que el contexto mande ~440MB.
       context: .
-      dockerfile: src/gateway/Dockerfile
+      dockerfile: src/api-gateway/Dockerfile
     container_name: multicatalogo-gateway
     restart: unless-stopped
     depends_on:
@@ -253,7 +253,7 @@ services:
       # Contexto raiz (igual que el gateway) para que aplique el mismo
       # .dockerignore y `node_modules`/`dist` del host no viajen al build.
       context: .
-      dockerfile: src/Frontend/Dockerfile
+      dockerfile: src/frontend/Dockerfile
     container_name: multicatalogo-frontend
     restart: unless-stopped
     depends_on:
@@ -274,7 +274,7 @@ services:
       - "${FRONTEND_PORT:-5173}:5173"
     volumes:
       # Codigo del host: HMR recompila al guardar.
-      - ./src/Frontend:/app
+      - ./src/frontend:/app
       # node_modules en volumen con nombre: tapa el del host (que es del
       # sistema, no del contenedor) y preserva el que instalo la imagen al
       # construirla; Docker lo siembra en el primer arranque.

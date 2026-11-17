@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./src/Backend
+        working-directory: ./src/api-catalogo
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
-          cache-dependency-path: ./src/Backend/go.sum
+          cache-dependency-path: ./src/api-catalogo/go.sum
 
       - name: Download Go dependencies
         run: go mod download
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./src/Frontend
+        working-directory: ./src/frontend
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -57,7 +57,7 @@ jobs:
         with:
           node-version: 22
           cache: 'pnpm'
-          cache-dependency-path: ./src/Frontend/pnpm-lock.yaml
+          cache-dependency-path: ./src/frontend/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -73,7 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./src/fastAPI_SaaS
+        working-directory: ./src/api-saas
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -82,7 +82,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: ./src/fastAPI_SaaS/uv.lock
+          cache-dependency-glob: ./src/api-saas/uv.lock
 
       - name: Install dependencies
         run: uv sync --frozen --group dev

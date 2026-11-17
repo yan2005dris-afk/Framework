@@ -10,7 +10,7 @@ build/
 *.dll
 *.so
 *.dylib
-/src/Backend/multicatalogo-backend
+/src/api-catalogo/multicatalogo-backend
 multicatalogo-backend
 
 # Environment
