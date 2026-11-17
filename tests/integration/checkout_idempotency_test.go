@@ -174,7 +174,7 @@ func TestCheckoutIdempotencyMismoKeyUnSoloPedido(t *testing.T) {
 	ctx := context.Background()
 	var filas int
 	if err := conn.QueryRow(ctx,
-		`SELECT COUNT(*) FROM checkout_idempotencia WHERE clave = $1`, key,
+ 	`SELECT COUNT(*) FROM backend.checkout_idempotencia WHERE clave = $1`, key,
 	).Scan(&filas); err != nil {
 		t.Fatalf("No se pudo consultar checkout_idempotencia: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestCheckoutIdempotencyMismoKeyUnSoloPedido(t *testing.T) {
 	// Y el pedido que devolvió el replay tiene que existir una sola vez.
 	var pedidos int
 	if err := conn.QueryRow(ctx,
-		`SELECT COUNT(*) FROM pedidos WHERE id = $1`, resp1.PedidoID,
+ 	`SELECT COUNT(*) FROM backend.pedidos WHERE id = $1`, resp1.PedidoID,
 	).Scan(&pedidos); err != nil {
 		t.Fatalf("No se pudo consultar pedidos: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestCheckoutIdempotencyConcurrenciaMismaKey(t *testing.T) {
 	ctx := context.Background()
 	var filas int
 	if err := conn.QueryRow(ctx,
-		`SELECT COUNT(*) FROM checkout_idempotencia WHERE clave = $1`, key,
+ 	`SELECT COUNT(*) FROM backend.checkout_idempotencia WHERE clave = $1`, key,
 	).Scan(&filas); err != nil {
 		t.Fatalf("No se pudo consultar checkout_idempotencia: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestCheckoutIdempotencyConcurrenciaMismaKey(t *testing.T) {
 
 	var pedidos int
 	if err := conn.QueryRow(ctx,
-		`SELECT COUNT(*) FROM pedidos WHERE id = $1`, pedidoIDGanador,
+ 	`SELECT COUNT(*) FROM backend.pedidos WHERE id = $1`, pedidoIDGanador,
 	).Scan(&pedidos); err != nil {
 		t.Fatalf("No se pudo consultar pedidos: %v", err)
 	}

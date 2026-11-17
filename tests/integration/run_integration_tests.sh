@@ -158,11 +158,11 @@ if [ "$RUN_PY" = 1 ]; then
     yellow "[tests] Ejecutando tests de integración (Python)..."
     cd "$SCRIPT_DIR"
 
-    # Ambos archivos usan el venv de fastAPI_SaaS: es el único del repo con
+    # Ambos archivos usan el venv de api-saas: es el único del repo con
     # psycopg2 (test de RLS) y httpx (test de auth). Se lanzan por separado para
     # que un archivo que no se pueda importar no corte la collection del otro.
     if command -v uv >/dev/null 2>&1; then
-        PY_TEST=(uv run --project "$PROJECT_ROOT/fastAPI_SaaS" pytest)
+        PY_TEST=(uv run --project "$PROJECT_ROOT/src/api-saas" pytest)
     elif command -v pytest >/dev/null 2>&1; then
         # Fallback: `pytest` tiene que estar instalado y con psycopg2.
         PY_TEST=(pytest)
