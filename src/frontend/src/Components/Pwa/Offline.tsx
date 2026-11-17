@@ -1,5 +1,5 @@
 import { useRouter } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 
 /**

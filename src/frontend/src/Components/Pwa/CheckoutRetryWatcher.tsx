@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { borrarIntento, leerIntentos } from "@/lib/checkoutRetry";
 import { NetworkError } from "@/services/http";

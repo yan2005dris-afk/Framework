@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # sola fuente de verdad para el nombre del rol.
     saas_db_app_role: str = "saas_app"
 
+    # Valkey message broker / event stream
+    valkey_host: str = "localhost"
+    valkey_port: int = 6379
+    valkey_password: str = ""
+
     # ADMIN (solo Alembic): permisos de DDL. El default corresponde al
     # superuser del stack (`postgres`), que ademas es owner de las tablas.
     saas_db_admin_user: str = "postgres"

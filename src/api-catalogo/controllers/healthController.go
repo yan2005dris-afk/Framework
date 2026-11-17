@@ -18,26 +18,26 @@ import (
 //   - 503 + status="unhealthy"-> PG caído (no se puede servir la API correctamente).
 type HealthController struct {
 	dbPool *pgxpool.Pool
-	redis  *redis.Client
+	valkey *redis.Client
 }
 
-// NewHealthController crea un HealthController con las dependencias de pool y cliente Redis.
-// Si dbPool o redis vienen nil, se intenta usar config.DB / config.RedisClient como fallback.
-func NewHealthController(dbPool *pgxpool.Pool, redisClient *redis.Client) *HealthController {
+// NewHealthController crea un HealthController con las dependencias de pool y cliente Valkey.
+// Si dbPool o valkey vienen nil, se intenta usar config.DB / config.GetValkeyClient como fallback.
+func NewHealthController(dbPool *pgxpool.Pool, valkeyClient *redis.Client) *HealthController {
 	if dbPool == nil {
 		dbPool = config.DB
 	}
-	if redisClient == nil {
-		redisClient = config.RedisClient
+	if valkeyClient == nil {
+		valkeyClient, _ = config.GetValkeyClient()
 	}
-	return &HealthController{dbPool: dbPool, redis: redisClient}
+	return &HealthController{dbPool: dbPool, valkey: valkeyClient}
 }
 
-// Health ejecuta un ping a PostgreSQL y Redis con timeout corto (no usa el contexto del request).
+// Health ejecuta un ping a PostgreSQL y Valkey con timeout corto (no usa el contexto del request).
 // Devuelve JSON con el estado desglosado por componente.
 func (h *HealthController) Health(c *fiber.Ctx) error {
 	pgStatus := "down"
-	redisStatus := "down"
+	valkeyStatus := "down"
 
 	if h.dbPool != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -48,18 +48,18 @@ func (h *HealthController) Health(c *fiber.Ctx) error {
 		}
 	}
 
-	if h.redis != nil {
+	if h.valkey != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		err := h.redis.Ping(ctx).Err()
+		err := h.valkey.Ping(ctx).Err()
 		cancel()
 		if err == nil {
-			redisStatus = "up"
+			valkeyStatus = "up"
 		}
 	}
 
 	components := fiber.Map{
 		"postgres": pgStatus,
-		"redis":    redisStatus,
+		"valkey":   valkeyStatus,
 	}
 
 	switch {
@@ -68,11 +68,11 @@ func (h *HealthController) Health(c *fiber.Ctx) error {
 			"status":     "unhealthy",
 			"components": components,
 		})
-	case redisStatus == "down":
+	case valkeyStatus == "down":
 		return c.JSON(fiber.Map{
 			"status":     "degraded",
 			"components": components,
-			"message":    "Funcionando sin caché: Redis no responde",
+			"message":    "Funcionando sin caché: Valkey no responde",
 		})
 	default:
 		return c.JSON(fiber.Map{

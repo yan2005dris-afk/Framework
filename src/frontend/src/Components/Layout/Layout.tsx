@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/Components/ui/tooltip";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
 

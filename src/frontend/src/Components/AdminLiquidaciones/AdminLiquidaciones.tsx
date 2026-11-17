@@ -11,8 +11,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+} from "@/Components/ui/dialog";
+import { Button } from "@/Components/ui/button";
 import { AlertCircle, CheckCircle2, DollarSign, Loader2 } from "lucide-react";
 
 export const AdminLiquidaciones = () => {
@@ -318,7 +318,7 @@ export const AdminLiquidaciones = () => {
       {/* Modal Shadcn para Resultado / Notificación */}
       <Dialog
         open={modalFeedback.open}
-        onOpenChange={(open) => setModalFeedback((prev) => ({ ...prev, open }))}
+        onOpenChange={(open: boolean) => setModalFeedback((prev) => ({ ...prev, open }))}
       >
         <DialogContent className="sm:max-w-sm text-center">
           <DialogHeader>
