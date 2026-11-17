@@ -111,25 +111,35 @@ no filtran.
 ## Estructura
 
 ```
-fastAPI_SaaS/
-├── pyproject.toml          # uv-managed
+src/api-saas/
+├── pyproject.toml          # uv-managed + contratos import-linter
 ├── README.md
 ├── Dockerfile              # uv-based multi-stage
 ├── docker-compose.yml      # saas-db + saas-api
 ├── .env.example            # contrato
 ├── alembic.ini
 ├── app/
-│   ├── main.py             # FastAPI app, CORS, router mount
-│   ├── core/
+│   ├── main.py             # FastAPI app, CORS, registro de bounded contexts
+│   ├── registry.py         # Punto único de importación de modelos para Alembic
+│   ├── shared/             # Plataforma y componentes transversales
 │   │   ├── config.py       # Pydantic Settings (runtime + admin)
-│   │   └── db.py           # async engine + get_db + get_tenant_db (GUC)
-│   ├── api/
-│   │   └── health.py
-│   ├── models/
-│   │   ├── base.py         # DeclarativeBase + TimestampMixin
-│   │   ├── tenant.py
-│   │   └── user.py
-│   └── schemas/            # Pydantic v2 DTOs (placeholder)
+│   │   ├── logging.py      # Structured JSON logging
+│   │   ├── health.py       # Health check endpoint
+│   │   ├── auth_proxy.py   # Proxies HTTP a api-auth
+│   │   ├── db/
+│   │   │   ├── base.py     # DeclarativeBase + TimestampMixin
+│   │   │   └── session.py  # async engine + get_db + get_tenant_db (RLS GUC)
+│   │   └── tenancy/        # Aislamiento multi-tenant
+│   │       ├── middleware.py
+│   │       ├── dependencies.py
+│   │       ├── principal.py
+│   │       ├── models.py   # Tenant model
+│   │       ├── service.py
+│   │       └── ports.py
+│   └── modules/            # Bounded contexts autocontenidos
+│       ├── billing/        # router -> service -> repository + schemas, models
+│       ├── pedidos/        # router -> service -> repository + schemas, models, enums
+│       └── usuarios/       # router -> service -> repository + schemas, models
 ├── alembic/
 │   ├── env.py
 │   ├── script.py.mako
@@ -137,10 +147,18 @@ fastAPI_SaaS/
 │       ├── 0001_initial.py
 │       ├── 0002_billing.py
 │       ├── 0003_rls_policies.py
-│       └── 0004_saas_app_role.py
+│       ├── 0004_saas_app_role.py
+│       └── 0005_pedidos.py
 └── tests/
     ├── conftest.py
-    └── test_health.py
+    ├── test_auth.py
+    ├── test_billing_api.py
+    ├── test_health.py
+    ├── test_logging_json.py
+    ├── test_pedidos_api.py
+    ├── test_tenant_session.py
+    ├── test_users_api.py
+    └── test_users_crud.py
 ```
 
 ## Convenciones

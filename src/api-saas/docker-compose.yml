@@ -5,7 +5,7 @@
 #     Go/Fiber del repo, que va en :5434).
 #   - saas-api: FastAPI en :8000, depende de saas-db healthy.
 #
-# Comandos utiles (desde Unidad3_SaaS/):
+# Comandos utiles (desde src/api-saas/):
 #   docker compose up -d saas-db          # solo BD
 #   docker compose up --build             # BD + API
 #   docker compose logs -f saas-api
