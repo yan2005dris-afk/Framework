@@ -7,11 +7,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+} from "@/Components/ui/table";
+import { Button } from "@/Components/ui/button";
+import { Badge } from "@/Components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/Components/ui/card";
+import { Input } from "@/Components/ui/input";
 import { UserPlus, Trash2, Mail, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -102,7 +102,7 @@ export const SaasUsuarios = () => {
                 type="email"
                 placeholder="colaborador@empresa.com"
                 value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewEmail(e.target.value)}
                 className="pl-9"
                 required
               />

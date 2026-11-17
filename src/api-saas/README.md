@@ -10,7 +10,7 @@ La regla de partición entre los dos servicios:
 
 | Concern | Backend (Go/Fiber) | SaaS (FastAPI) |
 |---|---|---|
-| Checkout transaccional ACID | ✅ (PG + Redis) | — |
+| Checkout transaccional ACID | ✅ (PG + Valkey) | — |
 | Catálogo de productos (catalogo público) | ✅ (`GET /api/productos`) | — |
 | Red multinivel MLM | ✅ (`GET /api/red`, ya con auth) | — |
 | Auth de usuarios finales (bcrypt + JWT HS256 + cookie httpOnly) | ✅ | — |

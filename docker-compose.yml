@@ -63,16 +63,21 @@ services:
       retries: 10
 
   redis:
-    image: redis:alpine
+    image: valkey/valkey:8-alpine
     container_name: multicatalogo-redis
     restart: unless-stopped
     ports:
       - "${REDIS_PORT:-6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      default:
+        aliases:
+          - valkey
+          - redis
 
   # ============================================================================
   # APLICACIONES
@@ -85,6 +90,8 @@ services:
     restart: unless-stopped
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     env_file: .env
     environment:
@@ -137,6 +144,8 @@ services:
     restart: unless-stopped
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     env_file: .env
     environment:

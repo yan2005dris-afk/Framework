@@ -69,6 +69,6 @@ func (rc *RedController) GetRed(c *fiber.Ctx) error {
 
 // Compatibilidad hacia atrás
 func GetRed(c *fiber.Ctx) error {
-	ctrl := NewRedController(&repository.PostgresRepository{}, &repository.RedisCacheRepository{}, "dev")
+	ctrl := NewRedController(&repository.PostgresRepository{}, &repository.ValkeyCacheRepository{}, "dev")
 	return ctrl.GetRed(c)
 }

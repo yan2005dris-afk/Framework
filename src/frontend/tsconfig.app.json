@@ -20,7 +20,8 @@
        Sin "baseUrl": esta deprecada y falla en TypeScript 6. Los "paths"
        se resuelven relativos a este archivo. */
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/Components/*"]
     },
 
     /* Linting */

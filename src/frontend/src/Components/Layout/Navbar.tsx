@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/Components/ui/badge";
+import { Button } from "@/Components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCart } from "../../Context/useCart";
 import { useAuth } from "../../Context/useAuth";

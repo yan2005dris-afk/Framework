@@ -16,16 +16,19 @@ Para produccion:
     uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 """
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.events.consumer import pedidos_consumer
 from app.modules import billing, pedidos, usuarios
 from app.shared.auth_proxy import _close_client, router as auth_router
 from app.shared.config import settings
 from app.shared.health import router as health_router
 from app.shared.logging import configure_logging
 from app.shared.tenancy.middleware import set_tenant_context
+from app.shared.valkey import close_valkey_client
 
 # Se llama a nivel de modulo: uvicorn ya configuro sus loggers cuando importa
 # la app, asi que esta es la ultima palabra sobre el formato de salida.
@@ -38,9 +41,17 @@ FEATURE_MODULES = (pedidos, usuarios, billing)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Hook de startup/shutdown. Cierra el cliente httpx singleton del proxy."""
+    """Hook de startup/shutdown. Inicia el consumidor de eventos de Valkey y cierra clientes."""
+    consumer_task = asyncio.create_task(pedidos_consumer.start())
     yield
+    pedidos_consumer.stop()
+    consumer_task.cancel()
+    try:
+        await consumer_task
+    except asyncio.CancelledError:
+        pass
     await _close_client()
+    await close_valkey_client()
 
 
 app = FastAPI(

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { saasApi, type PlanSaaS, type SubscriptionSaaS } from "@/services/saasService";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/Components/ui/card";
+import { Button } from "@/Components/ui/button";
+import { Badge } from "@/Components/ui/badge";
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 

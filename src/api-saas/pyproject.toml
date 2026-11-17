@@ -31,6 +31,8 @@ dependencies = [
     # bcrypt: hashing de passwords para users_saas
     # (app/modules/usuarios/service.py).
     "bcrypt>=4.1,<6.0",
+    # redis: cliente asincrono nativo para Valkey/Redis Streams (consumer groups + ACK).
+    "redis>=5.0,<6.0",
 ]
 
 [dependency-groups]

@@ -396,29 +396,30 @@ func (r *PostgresRepository) ActualizarComisiones(usuarioID int, totalPedido flo
 	return nil
 }
 
-// RedisCacheRepository implementa CacheRepository usando el cliente go-redis.
-type RedisCacheRepository struct {
+// ValkeyCacheRepository implementa CacheRepository usando el cliente Valkey (go-redis).
+type ValkeyCacheRepository struct {
 	client *redis.Client
 }
 
-// NewRedisCacheRepository crea una nueva instancia de RedisCacheRepository.
-func NewRedisCacheRepository(client *redis.Client) *RedisCacheRepository {
-	return &RedisCacheRepository{client: client}
+// NewValkeyCacheRepository crea una nueva instancia de ValkeyCacheRepository.
+func NewValkeyCacheRepository(client *redis.Client) *ValkeyCacheRepository {
+	return &ValkeyCacheRepository{client: client}
 }
 
-// getClient retorna el cliente inyectado o el global como fallback.
-func (c *RedisCacheRepository) getClient() *redis.Client {
+// getClient retorna el cliente inyectado o el Singleton como fallback.
+func (c *ValkeyCacheRepository) getClient() *redis.Client {
 	if c != nil && c.client != nil {
 		return c.client
 	}
-	return config.RedisClient
+	client, _ := config.GetValkeyClient()
+	return client
 }
 
 // Get obtiene un valor de la caché.
-func (c *RedisCacheRepository) Get(key string) ([]byte, error) {
+func (c *ValkeyCacheRepository) Get(key string) ([]byte, error) {
 	client := c.getClient()
 	if client == nil {
-		return nil, errors.New("cliente de redis no disponible")
+		return nil, errors.New("cliente de valkey no disponible")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -427,10 +428,10 @@ func (c *RedisCacheRepository) Get(key string) ([]byte, error) {
 }
 
 // Set guarda un valor con expiración TTL en la caché.
-func (c *RedisCacheRepository) Set(key string, value []byte, ttlSeconds int) error {
+func (c *ValkeyCacheRepository) Set(key string, value []byte, ttlSeconds int) error {
 	client := c.getClient()
 	if client == nil {
-		return errors.New("cliente de redis no disponible")
+		return errors.New("cliente de valkey no disponible")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -439,10 +440,10 @@ func (c *RedisCacheRepository) Set(key string, value []byte, ttlSeconds int) err
 }
 
 // Del elimina una o más claves de la caché.
-func (c *RedisCacheRepository) Del(key string) error {
+func (c *ValkeyCacheRepository) Del(key string) error {
 	client := c.getClient()
 	if client == nil {
-		return errors.New("cliente de redis no disponible")
+		return errors.New("cliente de valkey no disponible")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 
 /**
  * Catch-all: cualquier path desconocido vuelve a la raiz, igual que el
