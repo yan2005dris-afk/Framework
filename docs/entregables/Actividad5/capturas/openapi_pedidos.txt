@@ -1,0 +1,13 @@
+﻿Paths de pedidos:
+  POST   /api/{tenant_id}/pedidos
+  GET    /api/{tenant_id}/pedidos
+  GET    /api/{tenant_id}/pedidos/{pedido_id}
+  DELETE /api/{tenant_id}/pedidos/{pedido_id}
+  PUT    /api/{tenant_id}/pedidos/{pedido_id}/estado
+
+Reglas del schema de entrada (Pydantic):
+  PedidoCreate.cantidad     = {"type": "integer", "exclusiveMinimum": 0.0, "title": "Cantidad", "description": "Unidades pedidas. Debe ser mayor que cero.", "examples": [3]}
+  PedidoCreate.total        = {"anyOf": [{"type": "number", "exclusiveMinimum": 0.0}, {"type": "string"}], "title": "Total", "description": "Importe total del pedido. Debe ser mayor que cero.", "examples": ["149.90"]}
+  PedidoEstadoUpdate.estado = {"$ref": "#/components/schemas/EstadoPedido", "description": "Estado destino del pedido", "examples": ["preparando"]}
+
+Schemas generados: EstadoPedido, PedidoCreate, PedidoEstadoUpdate, PedidoListResponse, PedidoResponse

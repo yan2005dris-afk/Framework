@@ -1,0 +1,37 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.13.14, pytest-8.4.2, pluggy-1.7.0 -- C:\Users\UserWin11\Desktop\yandris_cursos\Framework\fastAPI_SaaS\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\UserWin11\Desktop\yandris_cursos\Framework\fastAPI_SaaS
+configfile: pyproject.toml
+plugins: anyio-4.16.0, asyncio-0.26.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=function
+collecting ... collected 26 items
+
+tests/test_pedidos_api.py::test_create_pedido_valido_returns_201 PASSED  [  3%]
+tests/test_pedidos_api.py::test_create_pedido_con_cantidad_no_positiva_returns_422[0] PASSED [  7%]
+tests/test_pedidos_api.py::test_create_pedido_con_cantidad_no_positiva_returns_422[-1] PASSED [ 11%]
+tests/test_pedidos_api.py::test_create_pedido_con_cantidad_no_positiva_returns_422[-50] PASSED [ 15%]
+tests/test_pedidos_api.py::test_create_pedido_con_total_no_positivo_returns_422[0] PASSED [ 19%]
+tests/test_pedidos_api.py::test_create_pedido_con_total_no_positivo_returns_422[0.00] PASSED [ 23%]
+tests/test_pedidos_api.py::test_create_pedido_con_total_no_positivo_returns_422[-0.01] PASSED [ 26%]
+tests/test_pedidos_api.py::test_create_pedido_con_total_no_positivo_returns_422[-100] PASSED [ 30%]
+tests/test_pedidos_api.py::test_db_check_constraint_rechaza_cantidad_invalida PASSED [ 34%]
+tests/test_pedidos_api.py::test_create_pedido_sin_identidad_returns_401 PASSED [ 38%]
+tests/test_pedidos_api.py::test_admin_de_otro_tenant_returns_403 PASSED  [ 42%]
+tests/test_pedidos_api.py::test_superadmin_puede_operar_sobre_cualquier_tenant PASSED [ 46%]
+tests/test_pedidos_api.py::test_create_pedido_en_tenant_inexistente_returns_404 PASSED [ 50%]
+tests/test_pedidos_api.py::test_list_aisla_pedidos_por_tenant PASSED     [ 53%]
+tests/test_pedidos_api.py::test_list_filtra_por_estado PASSED            [ 57%]
+tests/test_pedidos_api.py::test_get_pedido_de_otro_tenant_returns_404 PASSED [ 61%]
+tests/test_pedidos_api.py::test_put_estado_transicion_valida_returns_200 PASSED [ 65%]
+tests/test_pedidos_api.py::test_put_estado_transicion_invalida_returns_400 PASSED [ 69%]
+tests/test_pedidos_api.py::test_put_estado_inexistente_returns_422 PASSED [ 73%]
+tests/test_pedidos_api.py::test_put_estado_de_pedido_ajeno_returns_404 PASSED [ 76%]
+tests/test_pedidos_api.py::test_put_estado_requiere_admin PASSED         [ 80%]
+tests/test_pedidos_api.py::test_put_estado_sin_identidad_returns_401 PASSED [ 84%]
+tests/test_pedidos_api.py::test_delete_returns_204_y_borra PASSED        [ 88%]
+tests/test_pedidos_api.py::test_delete_de_pedido_ajeno_returns_404 PASSED [ 92%]
+tests/test_pedidos_api.py::test_delete_requiere_admin PASSED             [ 96%]
+tests/test_pedidos_api.py::test_delete_inexistente_returns_404 PASSED    [100%]
+
+============================= 26 passed in 1.17s ==============================

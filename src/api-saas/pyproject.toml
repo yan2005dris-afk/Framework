@@ -1,0 +1,114 @@
+[project]
+name = "multicatalogo-saas"
+version = "0.1.0"
+description = "Capa SaaS / multitenant de MultiCatálogo sobre FastAPI"
+readme = "README.md"
+requires-python = ">=3.11,<3.16"
+license = { text = "MIT" }
+authors = [
+    { name = "MultiCatálogo Team" },
+]
+
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.32,<1.0",
+    # pydantic[email]: habilita EmailStr (validacion de dominio) usada en
+    # app/modules/{usuarios,billing}/schemas.py.
+    "pydantic[email]>=2.9,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    # sqlalchemy[asyncio]: trae greenlet, requerido por el motor async
+    # de SQLAlchemy 2.x (app/shared/db/session.py). Sin el extra, importar
+    # sqlalchemy.ext.asyncio lanza ImportError.
+    "sqlalchemy[asyncio]>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    "asyncpg>=0.30,<1.0",
+    "psycopg2-binary>=2.9,<3.0",
+    "python-dotenv>=1.0,<2.0",
+    "python-multipart>=0.0.12,<1.0",
+    # httpx: usado en runtime por app/shared/auth_proxy.py para el proxy
+    # al auth-service.
+    "httpx>=0.27,<1.0",
+    # bcrypt: hashing de passwords para users_saas
+    # (app/modules/usuarios/service.py).
+    "bcrypt>=4.1,<6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "aiosqlite>=0.20,<1.0",
+    # pyjwt: tests/integration/test_auth_integration.py decodifica los JWT
+    # que emite el auth-service para verificar claims y firma. Ningun
+    # proyecto lo declaraba, asi que la coleccion de pytest fallaba con
+    # ModuleNotFoundError: No module named 'jwt'.
+    "pyjwt>=2.9,<3.0",
+    # import-linter: verifica los contratos de arquitectura por bounded
+    # context (independencia entre modulos, shared no importa modules y
+    # capas router -> service -> repository). Correr: lint-imports
+    "import-linter>=2.1,<3.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+# ----------------------------------------------------------------------
+# Contratos de arquitectura (import-linter). Correr: lint-imports
+#
+# El refactor a bounded contexts no se sostiene solo con disciplina: estos
+# contratos fallan el CI si alguien vuelve a acoplar los modulos.
+# ----------------------------------------------------------------------
+[tool.importlinter]
+root_packages = ["app"]
+
+[[tool.importlinter.contracts]]
+name = "Bounded contexts: pedidos, usuarios y billing son independientes"
+type = "independence"
+modules = [
+    "app.modules.pedidos",
+    "app.modules.usuarios",
+    "app.modules.billing",
+]
+
+[[tool.importlinter.contracts]]
+name = "La plataforma (shared) no conoce los modulos de feature"
+type = "forbidden"
+source_modules = ["app.shared"]
+forbidden_modules = ["app.modules"]
+
+[[tool.importlinter.contracts]]
+name = "pedidos: router -> service -> repository"
+type = "layers"
+layers = [
+    "app.modules.pedidos.router",
+    "app.modules.pedidos.service",
+    "app.modules.pedidos.repository",
+]
+
+[[tool.importlinter.contracts]]
+name = "usuarios: router -> service -> repository"
+type = "layers"
+layers = [
+    "app.modules.usuarios.router",
+    "app.modules.usuarios.service",
+    "app.modules.usuarios.repository",
+]
+
+[[tool.importlinter.contracts]]
+name = "billing: router -> service -> repository"
+type = "layers"
+layers = [
+    "app.modules.billing.router",
+    "app.modules.billing.service",
+    "app.modules.billing.repository",
+]
