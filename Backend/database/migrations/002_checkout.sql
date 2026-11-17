@@ -8,7 +8,7 @@
 -- Es idempotente: usa IF NOT EXISTS y los CREATE INDEX también.
 
 -- 1. Tabla pedidos (cabecera de la compra)
-CREATE TABLE IF NOT EXISTS pedidos (
+CREATE TABLE IF NOT EXISTS backend.pedidos (
     id SERIAL PRIMARY KEY,
     usuario_id INT NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     nombre_cliente VARCHAR(255) NOT NULL,
@@ -20,17 +20,17 @@ CREATE TABLE IF NOT EXISTS pedidos (
 );
 
 -- 2. Tabla pedido_items (líneas del pedido)
-CREATE TABLE IF NOT EXISTS pedido_items (
+CREATE TABLE IF NOT EXISTS backend.pedido_items (
     id SERIAL PRIMARY KEY,
-    pedido_id INT NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
-    producto_id INT NOT NULL REFERENCES productos(id),
+    pedido_id INT NOT NULL REFERENCES backend.pedidos(id) ON DELETE CASCADE,
+    producto_id INT NOT NULL REFERENCES backend.productos(id),
     cantidad INT NOT NULL,
     precio_unitario NUMERIC(10, 2) NOT NULL,
     subtotal NUMERIC(10, 2) NOT NULL
 );
 
 -- 3. Índices declarados en la checklist U2-T3
-CREATE INDEX IF NOT EXISTS idx_pedidos_email ON pedidos(email_cliente);
-CREATE INDEX IF NOT EXISTS idx_pedido_items_pedido ON pedido_items(pedido_id);
+CREATE INDEX IF NOT EXISTS idx_pedidos_email ON backend.pedidos(email_cliente);
+CREATE INDEX IF NOT EXISTS idx_pedido_items_pedido ON backend.pedido_items(pedido_id);
 
 SELECT 'migracion 002 aplicada' AS status;

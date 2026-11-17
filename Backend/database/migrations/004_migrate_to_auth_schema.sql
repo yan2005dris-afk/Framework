@@ -41,8 +41,8 @@ END
 $mig$;
 
 -- 2. Reapuntar la FK de pedidos a auth.users (idempotente: primero la saca).
-ALTER TABLE public.pedidos DROP CONSTRAINT IF EXISTS pedidos_usuario_id_fkey;
-ALTER TABLE public.pedidos
+ALTER TABLE backend.pedidos DROP CONSTRAINT IF EXISTS pedidos_usuario_id_fkey;
+ALTER TABLE backend.pedidos
     ADD CONSTRAINT pedidos_usuario_id_fkey
     FOREIGN KEY (usuario_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 

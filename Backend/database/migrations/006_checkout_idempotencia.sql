@@ -14,16 +14,16 @@
 --
 -- Es idempotente: IF NOT EXISTS en tabla e índices.
 
-CREATE TABLE IF NOT EXISTS checkout_idempotencia (
+CREATE TABLE IF NOT EXISTS backend.checkout_idempotencia (
     usuario_id INT NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     clave VARCHAR(255) NOT NULL,
-    pedido_id INT NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
+    pedido_id INT NOT NULL REFERENCES backend.pedidos(id) ON DELETE CASCADE,
     creado_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (usuario_id, clave)
 );
 
 -- Respalda el borrado en cascada cuando se elimina un pedido: sin este índice
 -- Postgres tiene que revisar toda la tabla por cada pedido borrado.
-CREATE INDEX IF NOT EXISTS idx_checkout_idempotencia_pedido ON checkout_idempotencia (pedido_id);
+CREATE INDEX IF NOT EXISTS idx_checkout_idempotencia_pedido ON backend.checkout_idempotencia (pedido_id);
 
 SELECT 'migracion 006 aplicada' AS status;

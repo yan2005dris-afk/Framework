@@ -5,7 +5,7 @@
 # para crear el schema 'auth' en la BD compartida si no existe (idempotente).
 # Luego arranca el binario. Si la migracion falla, el contenedor se
 # reinicia y vuelve a intentar.
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum* ./
 RUN go mod download

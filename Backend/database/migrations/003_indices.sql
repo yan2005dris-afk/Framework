@@ -9,11 +9,11 @@
 -- 1. Indice sobre referidos.parent_id: clave para la reconstruccion
 --    del arbol multinivel en repository.ObtenerRed, que recorre la
 --    jerarquia con WHERE id IN (children of parent).
-CREATE INDEX IF NOT EXISTS idx_referidos_parent_id ON referidos(parent_id);
+CREATE INDEX IF NOT EXISTS idx_referidos_parent_id ON backend.referidos(parent_id);
 
 -- 2. Indice sobre productos.categoria: soporte para filtros del
 --    catalogo por categoria (Catalogo.tsx y futuras rutas /productos?categoria=...).
 --    Utile como base cuando crezca el catalogo.
-CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria);
+CREATE INDEX IF NOT EXISTS idx_productos_categoria ON backend.productos(categoria);
 
 SELECT 'migracion 003 aplicada' AS status;

@@ -13,7 +13,7 @@
 -- duplicar ni pisar datos que ya cambiaron a mano.
 
 -- Catalogo
-INSERT INTO productos (id, nombre, descripcion, precio, categoria, img, galeria) VALUES
+INSERT INTO backend.productos (id, nombre, descripcion, precio, categoria, img, galeria) VALUES
 (
     1,
     'Serum Revitalizante',
@@ -94,10 +94,10 @@ ON CONFLICT (id) DO UPDATE SET
     img = EXCLUDED.img,
     galeria = EXCLUDED.galeria;
 
-SELECT setval('productos_id_seq', COALESCE((SELECT MAX(id) FROM productos), 1));
+SELECT setval('backend.productos_id_seq', COALESCE((SELECT MAX(id) FROM backend.productos), 1));
 
 -- Arbol multinivel de referidos (lo que dibuja MiRed.tsx)
-INSERT INTO referidos (id, nombre, nivel, ventas, parent_id) VALUES
+INSERT INTO backend.referidos (id, nombre, nivel, ventas, parent_id) VALUES
 (0, 'Tú', 0, 2400.00, NULL),
 (1, 'Ana García', 1, 1200.00, 0),
 (2, 'Luis Poveda', 1, 850.00, 0),

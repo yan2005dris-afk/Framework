@@ -1,6 +1,6 @@
 # Dockerfile multi-stage para el Backend Go/Fiber.
 # Optimizado: build estatico sin CGO, alpine minimal al final.
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum* ./
 RUN go mod download

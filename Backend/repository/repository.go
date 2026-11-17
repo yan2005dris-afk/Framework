@@ -81,7 +81,7 @@ func (r *PostgresRepository) ObtenerProductos() ([]models.Producto, error) {
 	defer cancel()
 
 	query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
-	           FROM productos 
+	           FROM backend.productos 
 	           WHERE COALESCE(activo, true) = true 
 	           ORDER BY id ASC`
 	rows, err := pool.Query(ctx, query)
@@ -120,7 +120,7 @@ func (r *PostgresRepository) ObtenerProductoPorID(id int) (*models.Producto, err
 	defer cancel()
 
 	query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
-	           FROM productos WHERE id = $1`
+	           FROM backend.productos WHERE id = $1`
 	var p models.Producto
 	err = pool.QueryRow(ctx, query, id).Scan(&p.ID, &p.Nombre, &p.Descripcion, &p.Precio, &p.Categoria, &p.Img, &p.Galeria, &p.Activo, &p.Stock)
 	if err != nil {
@@ -147,7 +147,7 @@ func (r *PostgresRepository) ObtenerRed() (*models.Referido, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := `SELECT id, nombre, nivel, ventas, parent_id FROM referidos ORDER BY nivel ASC, id ASC`
+	query := `SELECT id, nombre, nivel, ventas, parent_id FROM backend.referidos ORDER BY nivel ASC, id ASC`
 	rows, err := pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("error al consultar referidos: %w", err)
@@ -231,7 +231,7 @@ func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutReque
 	if idempotencyKey != "" {
 		var pedidoIDExistente int
 		errReplay := tx.QueryRow(ctx,
-			`SELECT pedido_id FROM checkout_idempotencia WHERE usuario_id = $1 AND clave = $2`,
+ 		`SELECT pedido_id FROM backend.checkout_idempotencia WHERE usuario_id = $1 AND clave = $2`,
 			usuarioID, idempotencyKey,
 		).Scan(&pedidoIDExistente)
 		if errReplay == nil {
@@ -254,7 +254,7 @@ func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutReque
 
 	// 4. Insertar registro principal en tabla pedidos
 	insertPedidoQuery := `
-		INSERT INTO pedidos (usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado)
+		INSERT INTO backend.pedidos (usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado)
 		VALUES ($1, $2, $3, $4, $5, 'completado')
 		RETURNING id, creado_at
 	`
@@ -267,7 +267,7 @@ func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutReque
 
 	// 5. Insertar cada item en tabla pedido_items dentro de la misma transacción
 	insertItemQuery := `
-		INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unitario, subtotal)
+		INSERT INTO backend.pedido_items (pedido_id, producto_id, cantidad, precio_unitario, subtotal)
 		VALUES ($1, $2, $3, $4, $5)
 	`
 	for _, item := range req.Items {
@@ -283,7 +283,7 @@ func (r *PostgresRepository) CrearPedido(usuarioID int, req models.CheckoutReque
 	//    un pedido sin key, que es el estado que permite duplicar en el reintento.
 	if idempotencyKey != "" {
 		_, err = tx.Exec(ctx,
-			`INSERT INTO checkout_idempotencia (usuario_id, clave, pedido_id) VALUES ($1, $2, $3)`,
+			`INSERT INTO backend.checkout_idempotencia (usuario_id, clave, pedido_id) VALUES ($1, $2, $3)`,
 			usuarioID, idempotencyKey, pedidoID,
 		)
 		if err != nil {
@@ -331,7 +331,7 @@ func (r *PostgresRepository) replayPorClave(usuarioID int, clave string) (*model
 
 	var pedidoID int
 	err = pool.QueryRow(ctx,
-		`SELECT pedido_id FROM checkout_idempotencia WHERE usuario_id = $1 AND clave = $2`,
+		`SELECT pedido_id FROM backend.checkout_idempotencia WHERE usuario_id = $1 AND clave = $2`,
 		usuarioID, clave,
 	).Scan(&pedidoID)
 	if err != nil {
@@ -358,7 +358,7 @@ func (r *PostgresRepository) leerPedido(ctx context.Context, q consultor, pedido
 	var creadoAt time.Time
 	err := q.QueryRow(ctx,
 		`SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
-		 FROM pedidos WHERE id = $1`,
+		 FROM backend.pedidos WHERE id = $1`,
 		pedidoID,
 	).Scan(&pedido.ID, &pedido.UsuarioID, &pedido.NombreCliente, &pedido.EmailCliente,
 		&pedido.MetodoPago, &pedido.Total, &pedido.Estado, &creadoAt)
@@ -384,7 +384,7 @@ func (r *PostgresRepository) ActualizarComisiones(usuarioID int, totalPedido flo
 	// 1. Nodo comprador si existe en referidos (id = usuarioID)
 	// 2. Nodo raíz (id = 0 'Tú') que consolida las ventas globales de la red
 	query := `
-		UPDATE referidos 
+		UPDATE backend.referidos 
 		SET ventas = ventas + $1 
 		WHERE id IN (0, $2)
 	`
@@ -493,11 +493,11 @@ func (r *PostgresRepository) RegistrarComisionesPedido(pedidoID int, compradorID
 	rows, err := pool.Query(ctx, `
 		WITH RECURSIVE upline AS (
 			SELECT id, parent_id, 1 as nivel
-			FROM referidos
+			FROM backend.referidos
 			WHERE id = $1
 			UNION ALL
 			SELECT r.id, r.parent_id, u.nivel + 1
-			FROM referidos r
+			FROM backend.referidos r
 			JOIN upline u ON r.id = u.parent_id
 			WHERE u.nivel < 3
 		)
@@ -537,7 +537,7 @@ func (r *PostgresRepository) RegistrarComisionesPedido(pedidoID int, compradorID
 		var id int
 		var creadoEn time.Time
 		err := pool.QueryRow(ctx, `
-			INSERT INTO comisiones (pedido_id, referido_id, nivel, porcentaje, monto, estado)
+ 		INSERT INTO backend.comisiones (pedido_id, referido_id, nivel, porcentaje, monto, estado)
 			VALUES ($1, $2, $3, $4, $5, 'pendiente')
 			RETURNING id, creado_en
 		`, pedidoID, node.id, node.nivel, porcentaje, monto).Scan(&id, &creadoEn)
@@ -573,7 +573,7 @@ func (r *PostgresRepository) ObtenerComisionesPorReferido(referidoID int) (*mode
 
 	rows, err := pool.Query(ctx, `
 		SELECT id, pedido_id, referido_id, nivel, porcentaje, monto, estado, liquidacion_id, creado_en
-		FROM comisiones
+		FROM backend.comisiones
 		WHERE referido_id = $1
 		ORDER BY id DESC
 	`, referidoID)
@@ -627,7 +627,7 @@ func (r *PostgresRepository) LiquidarComisiones(referidoID int) (*models.Liquida
 		SELECT COALESCE(SUM(monto), 0)
 		FROM (
 			SELECT monto
-			FROM comisiones
+			FROM backend.comisiones
 			WHERE referido_id = $1 AND estado = 'pendiente'
 			FOR UPDATE
 		) sub
@@ -644,7 +644,7 @@ func (r *PostgresRepository) LiquidarComisiones(referidoID int) (*models.Liquida
 	var liq models.Liquidacion
 	var creadoEn, pagadaEn time.Time
 	err = tx.QueryRow(ctx, `
-		INSERT INTO liquidaciones (referido_id, total, estado, creado_en, pagada_en)
+		INSERT INTO backend.liquidaciones (referido_id, total, estado, creado_en, pagada_en)
 		VALUES ($1, $2, 'completada', NOW(), NOW())
 		RETURNING id, referido_id, total, estado, creado_en, pagada_en
 	`, referidoID, totalPendiente).Scan(&liq.ID, &liq.ReferidoID, &liq.Total, &liq.Estado, &creadoEn, &pagadaEn)
@@ -656,7 +656,7 @@ func (r *PostgresRepository) LiquidarComisiones(referidoID int) (*models.Liquida
 
 	// 3. Actualizar comisiones asociadas a 'pagada' con el id de liquidación
 	_, err = tx.Exec(ctx, `
-		UPDATE comisiones
+		UPDATE backend.comisiones
 		SET estado = 'pagada', liquidacion_id = $1
 		WHERE referido_id = $2 AND estado = 'pendiente'
 	`, liq.ID, referidoID)
@@ -683,7 +683,7 @@ func (r *PostgresRepository) ListarLiquidaciones() ([]models.Liquidacion, error)
 
 	rows, err := pool.Query(ctx, `
 		SELECT id, referido_id, total, estado, creado_en, pagada_en
-		FROM liquidaciones
+		FROM backend.liquidaciones
 		ORDER BY id DESC
 	`)
 	if err != nil {
@@ -718,7 +718,7 @@ func (r *PostgresRepository) ListarLiquidacionesPorReferido(referidoID int) ([]m
 
 	rows, err := pool.Query(ctx, `
 		SELECT id, referido_id, total, estado, creado_en, pagada_en
-		FROM liquidaciones
+		FROM backend.liquidaciones
 		WHERE referido_id = $1
 		ORDER BY id DESC
 	`, referidoID)
@@ -756,13 +756,13 @@ func (r *PostgresRepository) ObtenerProductosAdmin(busqueda string) ([]models.Pr
 	if busqueda != "" {
 		qPattern := "%" + busqueda + "%"
 		query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
-		           FROM productos 
+		           FROM backend.productos 
 		           WHERE nombre ILIKE $1 OR categoria ILIKE $1 
 		           ORDER BY id ASC`
 		rows, err = pool.Query(ctx, query, qPattern)
 	} else {
 		query := `SELECT id, nombre, descripcion, precio, categoria, img, galeria, COALESCE(activo, true), COALESCE(stock, 0) 
-		           FROM productos ORDER BY id ASC`
+		           FROM backend.productos ORDER BY id ASC`
 		rows, err = pool.Query(ctx, query)
 	}
 	if err != nil {
@@ -809,7 +809,7 @@ func (r *PostgresRepository) CrearProducto(req models.ProductoRequest) (*models.
 
 	var p models.Producto
 	query := `
-		INSERT INTO productos (nombre, descripcion, precio, categoria, img, galeria, activo, stock)
+		INSERT INTO backend.productos (nombre, descripcion, precio, categoria, img, galeria, activo, stock)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, nombre, descripcion, precio, categoria, img, galeria, activo, stock
 	`
@@ -862,7 +862,7 @@ func (r *PostgresRepository) ActualizarProducto(id int, req models.ProductoReque
 	}
 
 	query := `
-		UPDATE productos 
+		UPDATE backend.productos 
 		SET nombre = $1, descripcion = $2, precio = $3, categoria = $4, img = $5, galeria = $6, activo = $7, stock = $8
 		WHERE id = $9
 		RETURNING id, nombre, descripcion, precio, categoria, img, galeria, activo, stock
@@ -885,7 +885,7 @@ func (r *PostgresRepository) EliminarProductoLogico(id int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	tag, err := pool.Exec(ctx, `UPDATE productos SET activo = false WHERE id = $1`, id)
+	tag, err := pool.Exec(ctx, `UPDATE backend.productos SET activo = false WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("error al desactivar producto: %w", err)
 	}
@@ -914,7 +914,7 @@ func (r *PostgresRepository) ListarPedidosMios(usuarioID int, limit, offset int)
 
 	rows, err := pool.Query(ctx, `
 		SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
-		FROM pedidos
+		FROM backend.pedidos
 		WHERE usuario_id = $1
 		ORDER BY id DESC
 		LIMIT $2 OFFSET $3
@@ -958,7 +958,7 @@ func (r *PostgresRepository) ListarPedidosAdmin(estado string, limit, offset int
 	if estado != "" {
 		rows, err = pool.Query(ctx, `
 			SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
-			FROM pedidos
+			FROM backend.pedidos
 			WHERE estado = $1
 			ORDER BY id DESC
 			LIMIT $2 OFFSET $3
@@ -966,7 +966,7 @@ func (r *PostgresRepository) ListarPedidosAdmin(estado string, limit, offset int
 	} else {
 		rows, err = pool.Query(ctx, `
 			SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
-			FROM pedidos
+			FROM backend.pedidos
 			ORDER BY id DESC
 			LIMIT $1 OFFSET $2
 		`, limit, offset)
@@ -1003,7 +1003,7 @@ func (r *PostgresRepository) ObtenerPedidoDetalle(id int) (*models.PedidoConDeta
 	var cAt time.Time
 	err = pool.QueryRow(ctx, `
 		SELECT id, usuario_id, nombre_cliente, email_cliente, metodo_pago, total, estado, creado_at
-		FROM pedidos WHERE id = $1
+		FROM backend.pedidos WHERE id = $1
 	`, id).Scan(&p.ID, &p.UsuarioID, &p.NombreCliente, &p.EmailCliente, &p.MetodoPago, &p.Total, &p.Estado, &cAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1016,8 +1016,8 @@ func (r *PostgresRepository) ObtenerPedidoDetalle(id int) (*models.PedidoConDeta
 	rows, err := pool.Query(ctx, `
 		SELECT pi.id, pi.pedido_id, pi.producto_id, COALESCE(pr.nombre, 'Producto eliminado'), 
 		       COALESCE(pr.img, ''), pi.cantidad, pi.precio_unitario, pi.subtotal
-		FROM pedido_items pi
-		LEFT JOIN productos pr ON pi.producto_id = pr.id
+		FROM backend.pedido_items pi
+		LEFT JOIN backend.productos pr ON pi.producto_id = pr.id
 		WHERE pi.pedido_id = $1
 		ORDER BY pi.id ASC
 	`, id)
@@ -1056,7 +1056,7 @@ func (r *PostgresRepository) ActualizarEstadoPedido(id int, nuevoEstado string) 
 	defer tx.Rollback(ctx)
 
 	var estadoActual string
-	err = tx.QueryRow(ctx, `SELECT estado FROM pedidos WHERE id = $1 FOR UPDATE`, id).Scan(&estadoActual)
+	err = tx.QueryRow(ctx, `SELECT estado FROM backend.pedidos WHERE id = $1 FOR UPDATE`, id).Scan(&estadoActual)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -1070,7 +1070,7 @@ func (r *PostgresRepository) ActualizarEstadoPedido(id int, nuevoEstado string) 
 
 	// Si se cancela, restaurar stock de cada producto y revertir comisiones devengadas
 	if nuevoEstado == "cancelado" {
-		rows, err := tx.Query(ctx, `SELECT producto_id, cantidad FROM pedido_items WHERE pedido_id = $1`, id)
+		rows, err := tx.Query(ctx, `SELECT producto_id, cantidad FROM backend.pedido_items WHERE pedido_id = $1`, id)
 		if err != nil {
 			return fmt.Errorf("error al leer items para devolver stock: %w", err)
 		}
@@ -1088,17 +1088,17 @@ func (r *PostgresRepository) ActualizarEstadoPedido(id int, nuevoEstado string) 
 		rows.Close()
 
 		for _, it := range items {
-			_, err = tx.Exec(ctx, `UPDATE productos SET stock = stock + $1 WHERE id = $2`, it.cant, it.prodID)
+			_, err = tx.Exec(ctx, `UPDATE backend.productos SET stock = stock + $1 WHERE id = $2`, it.cant, it.prodID)
 			if err != nil {
 				return fmt.Errorf("error al restaurar stock de producto %d: %w", it.prodID, err)
 			}
 		}
 
 		// Revertir comisiones devengadas
-		_, _ = tx.Exec(ctx, `UPDATE comisiones SET estado = 'revertida' WHERE pedido_id = $1 AND estado = 'pendiente'`, id)
+		_, _ = tx.Exec(ctx, `UPDATE backend.comisiones SET estado = 'revertida' WHERE pedido_id = $1 AND estado = 'pendiente'`, id)
 	}
 
-	_, err = tx.Exec(ctx, `UPDATE pedidos SET estado = $1 WHERE id = $2`, nuevoEstado, id)
+	_, err = tx.Exec(ctx, `UPDATE backend.pedidos SET estado = $1 WHERE id = $2`, nuevoEstado, id)
 	if err != nil {
 		return fmt.Errorf("error al actualizar estado de pedido: %w", err)
 	}
@@ -1126,7 +1126,7 @@ func (r *PostgresRepository) ObtenerReporteResumen(desde, hasta string) (*models
 	// Consulta de ventas y pedidos excluyendo cancelados
 	err = pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(total), 0), COUNT(id)
-		FROM pedidos
+		FROM backend.pedidos
 		WHERE estado != 'cancelado'
 		  AND ($1 = '' OR creado_at >= $1::timestamp)
 		  AND ($2 = '' OR creado_at <= $2::timestamp)
@@ -1144,7 +1144,7 @@ func (r *PostgresRepository) ObtenerReporteResumen(desde, hasta string) (*models
 	var comisionesDevengadas float64
 	err = pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(monto), 0)
-		FROM comisiones
+		FROM backend.comisiones
 		WHERE estado != 'revertida'
 		  AND ($1 = '' OR creado_en >= $1::timestamp)
 		  AND ($2 = '' OR creado_en <= $2::timestamp)
@@ -1179,9 +1179,9 @@ func (r *PostgresRepository) ObtenerTopProductos(limit int) ([]models.TopProduct
 		SELECT pi.producto_id, COALESCE(pr.nombre, 'Producto'), 
 		       COALESCE(SUM(pi.subtotal), 0) as total_ventas,
 		       COALESCE(SUM(pi.cantidad), 0) as cantidad_total
-		FROM pedido_items pi
-		JOIN pedidos p ON pi.pedido_id = p.id
-		LEFT JOIN productos pr ON pi.producto_id = pr.id
+		FROM backend.pedido_items pi
+		JOIN backend.pedidos p ON pi.pedido_id = p.id
+		LEFT JOIN backend.productos pr ON pi.producto_id = pr.id
 		WHERE p.estado != 'cancelado'
 		GROUP BY pi.producto_id, pr.nombre
 		ORDER BY total_ventas DESC
@@ -1220,7 +1220,7 @@ func (r *PostgresRepository) ObtenerTopReferidos(limit int) ([]models.TopReferid
 
 	rows, err := pool.Query(ctx, `
 		SELECT id, nombre, nivel, ventas
-		FROM referidos
+		FROM backend.referidos
 		ORDER BY ventas DESC
 		LIMIT $1
 	`, limit)
@@ -1255,8 +1255,8 @@ func (r *PostgresRepository) ObtenerComisionesPendientes() ([]models.DeudaDistri
 		SELECT c.referido_id, COALESCE(rf.nombre, 'Distribuidor ' || c.referido_id),
 		       COALESCE(SUM(c.monto), 0) as deuda_total,
 		       COUNT(c.id) as cantidad_comisiones
-		FROM comisiones c
-		LEFT JOIN referidos rf ON c.referido_id = rf.id
+		FROM backend.comisiones c
+		LEFT JOIN backend.referidos rf ON c.referido_id = rf.id
 		WHERE c.estado = 'pendiente'
 		GROUP BY c.referido_id, rf.nombre
 		ORDER BY deuda_total DESC
@@ -1305,7 +1305,7 @@ func (r *PostgresRepository) RegistrarUsuario(req models.RegisterRequest, hashed
 	var parentID *int
 	if req.Ref != "" {
 		var pid int
-		err := tx.QueryRow(ctx, `SELECT id FROM referidos WHERE UPPER(codigo) = UPPER($1)`, req.Ref).Scan(&pid)
+		err := tx.QueryRow(ctx, `SELECT id FROM backend.referidos WHERE UPPER(codigo) = UPPER($1)`, req.Ref).Scan(&pid)
 		if err != nil {
 			return nil, errors.New("código de referido inválido")
 		}
@@ -1330,14 +1330,14 @@ func (r *PostgresRepository) RegistrarUsuario(req models.RegisterRequest, hashed
 	// 4. Crear el nodo del nuevo usuario en referidos
 	codigoAuto := strings.ToUpper(strings.Split(req.Email, "@")[0])
 	_, err = tx.Exec(ctx, `
-		INSERT INTO referidos (id, nombre, nivel, ventas, parent_id, codigo)
+		INSERT INTO backend.referidos (id, nombre, nivel, ventas, parent_id, codigo)
 		VALUES ($1, $2, 1, 0, $3, $4)
 		ON CONFLICT (id) DO NOTHING
 	`, usuario.ID, req.Nombre, parentID, codigoAuto)
 	if err != nil {
 		// Si colisiona el id o código, intentar con sufijo numérico
 		_, _ = tx.Exec(ctx, `
-			INSERT INTO referidos (id, nombre, nivel, ventas, parent_id, codigo)
+			INSERT INTO backend.referidos (id, nombre, nivel, ventas, parent_id, codigo)
 			VALUES ($1, $2, 1, 0, $3, $4)
 			ON CONFLICT (id) DO NOTHING
 		`, usuario.ID, req.Nombre, parentID, fmt.Sprintf("%s%d", codigoAuto, usuario.ID))
