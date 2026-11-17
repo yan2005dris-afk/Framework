@@ -24,12 +24,13 @@ CREATE SCHEMA IF NOT EXISTS backend;
 DO $migrate$
 DECLARE
     tbl text;
+    tbls text[] := ARRAY['productos', 'referidos', 'pedidos', 'pedido_items',
+                         'checkout_idempotencia', 'comisiones', 'liquidaciones'];
     old_schema text := 'public';
     new_schema text := 'backend';
 BEGIN
     -- Lista de tablas del Backend
-    FOREACH tbl IN ARRAY ['productos', 'referidos', 'pedidos', 'pedido_items',
-                           'checkout_idempotencia', 'comisiones', 'liquidaciones']
+    FOREACH tbl IN ARRAY tbls
     LOOP
         IF to_regclass(quote_ident(old_schema) || '.' || quote_ident(tbl)) IS NOT NULL THEN
             EXECUTE format('ALTER TABLE %I.%I SET SCHEMA %I',
