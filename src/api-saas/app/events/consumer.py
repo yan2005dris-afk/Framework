@@ -34,13 +34,13 @@ class PedidosEventConsumer:
         """Crea el grupo de consumo si no existe."""
         try:
             await client.xgroup_create(STREAM_NAME, CONSUMER_GROUP, id="0", mkstream=True)
-            logger.info("📦 Consumer Group '%s' creado para Stream '%s'", CONSUMER_GROUP, STREAM_NAME)
+            logger.info("[events] Consumer Group '%s' creado para Stream '%s'", CONSUMER_GROUP, STREAM_NAME)
         except Exception as e:
             # Si el grupo ya existe (BUSYGROUP), se ignora el error
             if "BUSYGROUP" in str(e):
                 pass
             else:
-                logger.warning("Error inicializando Consumer Group: %s", e)
+                logger.warning("[events] Error inicializando Consumer Group: %s", e)
 
     async def start(self) -> None:
         """Bucle principal de consumo de eventos."""
@@ -48,7 +48,7 @@ class PedidosEventConsumer:
         client = await get_valkey_client()
         await self.init_consumer_group(client)
 
-        logger.info("🚀 PedidosEventConsumer iniciado en stream: %s", STREAM_NAME)
+        logger.info("[events] PedidosEventConsumer iniciado en stream: %s", STREAM_NAME)
 
         while self.running:
             try:
@@ -72,17 +72,17 @@ class PedidosEventConsumer:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error("⚠️ Error en ciclo de PedidosEventConsumer: %s", e)
+                logger.error("[events] Error en ciclo de PedidosEventConsumer: %s", e)
                 await asyncio.sleep(2)
 
-        logger.info("🛑 PedidosEventConsumer detenido")
+        logger.info("[events] PedidosEventConsumer detenido")
 
     async def process_message(self, client: Any, message_id: str, data: dict[str, Any]) -> None:
         """Procesa un mensaje y emite XACK al confirmar."""
         event_type = data.get("event_type")
         raw_payload = data.get("payload", "{}")
 
-        logger.info("📥 Procesando evento [%s] ID: %s", event_type, message_id)
+        logger.info("[events] Procesando evento [%s] ID: %s", event_type, message_id)
 
         try:
             payload = json.loads(raw_payload)
@@ -106,13 +106,13 @@ class PedidosEventConsumer:
                     )
                     await session.commit()
 
-                logger.info("✅ Pedido sincronizado en tenant %s para cliente %s", tenant_id, cliente)
+                logger.info("[events] Pedido sincronizado en tenant %s para cliente %s", tenant_id, cliente)
 
             # Confirmar procesamiento con ACK
             await client.xack(STREAM_NAME, CONSUMER_GROUP, message_id)
 
         except Exception as e:
-            logger.error("❌ Fallo procesando evento %s (ID %s): %s", event_type, message_id, e)
+            logger.error("[events] Fallo procesando evento %s (ID %s): %s", event_type, message_id, e)
             # En caso de error, no enviamos XACK para permitir reintento posterior.
 
     def stop(self) -> None:

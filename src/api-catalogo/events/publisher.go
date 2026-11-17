@@ -30,6 +30,11 @@ type PedidoCreadoEvent struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// Publisher define el contrato para publicar eventos del dominio.
+type Publisher interface {
+	PublishPedidoCreado(ctx context.Context, event PedidoCreadoEvent) (string, error)
+}
+
 // EventPublisher gestiona la publicación de eventos en Valkey Streams.
 type EventPublisher struct {
 	client *redis.Client
@@ -46,6 +51,9 @@ func NewEventPublisher() (*EventPublisher, error) {
 
 // PublishPedidoCreado publica el evento pedido.creado en el Valkey Stream.
 func (p *EventPublisher) PublishPedidoCreado(ctx context.Context, event PedidoCreadoEvent) (string, error) {
+	if p == nil || p.client == nil {
+		return "", fmt.Errorf("EventPublisher o cliente Valkey es nil")
+	}
 	payload, err := json.Marshal(event)
 	if err != nil {
 		return "", fmt.Errorf("error al serializar evento pedido.creado: %w", err)
@@ -62,10 +70,10 @@ func (p *EventPublisher) PublishPedidoCreado(ctx context.Context, event PedidoCr
 
 	id, err := p.client.XAdd(ctx, args).Result()
 	if err != nil {
-		log.Printf("❌ Error publicando evento en Valkey Stream %s: %v", StreamPedidos, err)
+		log.Printf("[events] Error publicando evento en Valkey Stream %s: %v", StreamPedidos, err)
 		return "", fmt.Errorf("fallo al publicar en stream %s: %w", StreamPedidos, err)
 	}
 
-	log.Printf("📢 Evento %s publicado exitosamente en Valkey Stream [%s] con ID: %s", EventPedidoCreado, StreamPedidos, id)
+	log.Printf("[events] Evento %s publicado exitosamente en Valkey Stream [%s] con ID: %s", EventPedidoCreado, StreamPedidos, id)
 	return id, nil
 }

@@ -36,11 +36,11 @@ func GetValkeyClient() (*redis.Client, error) {
 
 		if err := valkeyClient.Ping(ctx).Err(); err != nil {
 			valkeyErr = fmt.Errorf("no se pudo conectar a Valkey (%s:%s): %w", host, port, err)
-			log.Printf("⚠️ %v", valkeyErr)
+			log.Printf("[valkey] %v", valkeyErr)
 			return
 		}
 
-		log.Printf("✅ Conexión Singleton exitosa a Valkey (%s:%s)", host, port)
+		log.Printf("[valkey] Conexion Singleton exitosa a Valkey (%s:%s)", host, port)
 	})
 
 	return valkeyClient, valkeyErr
@@ -50,9 +50,9 @@ func GetValkeyClient() (*redis.Client, error) {
 func CloseValkey() {
 	if valkeyClient != nil {
 		if err := valkeyClient.Close(); err != nil {
-			log.Printf("⚠️ Error al cerrar conexión a Valkey: %v", err)
+			log.Printf("[valkey] Error al cerrar conexion a Valkey: %v", err)
 		} else {
-			log.Println("🔌 Conexión Singleton a Valkey cerrada")
+			log.Println("[valkey] Conexion Singleton a Valkey cerrada")
 		}
 	}
 }

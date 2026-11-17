@@ -2,12 +2,15 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"multicatalogo-backend/controllers/helpers"
+	"multicatalogo-backend/events"
 	"multicatalogo-backend/middleware"
 	"multicatalogo-backend/models"
 	"multicatalogo-backend/repository"
@@ -17,6 +20,7 @@ import (
 type CheckoutController struct {
 	dbRepo    repository.DatabaseRepository
 	cacheRepo repository.CacheRepository
+	publisher events.Publisher
 	appEnv    string
 }
 
@@ -26,11 +30,24 @@ func NewCheckoutController(dbRepo repository.DatabaseRepository, cacheRepo repos
 	if appEnv == "" {
 		appEnv = "dev"
 	}
+	var pub events.Publisher
+	eventPub, err := events.NewEventPublisher()
+	if err != nil {
+		log.Printf("[checkout] Valkey EventPublisher no inicializado: %v", err)
+	} else {
+		pub = eventPub
+	}
 	return &CheckoutController{
 		dbRepo:    dbRepo,
 		cacheRepo: cacheRepo,
+		publisher: pub,
 		appEnv:    appEnv,
 	}
+}
+
+// SetPublisher permite inyectar un Publisher alternativo o mock para testing.
+func (c *CheckoutController) SetPublisher(pub events.Publisher) {
+	c.publisher = pub
 }
 
 // Checkout procesa la compra con transacciones ACID en PostgreSQL y cálculo asíncrono vía Goroutine.
@@ -84,7 +101,7 @@ func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 	// Paso 3: Transacción ACID en PostgreSQL (tx.Begin, INSERTs, Rollback/Commit)
 	pedido, replay, err := c.dbRepo.CrearPedido(usuarioIDVal, req, idempotencyKey)
 	if err != nil {
-		log.Printf("❌ Error en transacción de checkout: %v", err)
+		log.Printf("[checkout] Error en transacción de checkout: %v", err)
 		public, detail := helpers.SanitizeErrorDetails(c.appEnv, err)
 		if public == "" {
 			public = "Error al procesar el pedido. Transacción revertida."
@@ -109,20 +126,20 @@ func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 	// Importante: el email que se usa para invalidar la caché es el del
 	// token, NO el del body. Así la atribución de comisiones siempre va
 	// al usuario autenticado, incluso si el body miente.
-	go func(pedID int, total float64, uID int, email string) {
-		log.Printf("🧵 [Goroutine] Iniciando cálculo asíncrono de comisiones para usuario %d, total $%.2f", uID, total)
-		if err := c.dbRepo.ActualizarComisiones(uID, total); err != nil {
-			log.Printf("⚠️ [Goroutine] Error al actualizar comisiones: %v", err)
+	go func(ped *models.Pedido, reqItems []models.CheckoutItem, uID int, email string) {
+		log.Printf("[goroutine] Iniciando cálculo asíncrono de comisiones para usuario %d, total $%.2f", uID, ped.Total)
+		if err := c.dbRepo.ActualizarComisiones(uID, ped.Total); err != nil {
+			log.Printf("[goroutine] Error al actualizar comisiones: %v", err)
 		} else {
-			log.Printf("✅ [Goroutine] Comisiones actualizadas con éxito en PostgreSQL")
+			log.Printf("[goroutine] Comisiones actualizadas con éxito en PostgreSQL")
 		}
-		if _, err := c.dbRepo.RegistrarComisionesPedido(pedID, uID, total); err != nil {
-			log.Printf("⚠️ [Goroutine] Error al registrar ledger de comisiones: %v", err)
+		if _, err := c.dbRepo.RegistrarComisionesPedido(ped.ID, uID, ped.Total); err != nil {
+			log.Printf("[goroutine] Error al registrar ledger de comisiones: %v", err)
 		} else {
-			log.Printf("✅ [Goroutine] Ledger de comisiones registrado con éxito")
+			log.Printf("[goroutine] Ledger de comisiones registrado con éxito")
 		}
 
-		// Paso 5: Invalidación de Caché en Redis.
+		// Invalidación de Caché en Valkey.
 		// productos:all debe invalidarse porque el stock cambió.
 		// red:tree y red:tree:{email} deben invalidarse porque las ventas cambiaron.
 		if c.cacheRepo != nil {
@@ -131,9 +148,30 @@ func (c *CheckoutController) Checkout(ctx *fiber.Ctx) error {
 			if email != "" {
 				_ = c.cacheRepo.Del(fmt.Sprintf("red:tree:%s", email))
 			}
-			log.Printf("🧹 [Goroutine] Caché de productos y red invalidada en Redis")
+			log.Printf("[goroutine] Caché de productos y red invalidada en Valkey")
 		}
-	}(pedido.ID, pedido.Total, usuarioIDVal, tokenEmail)
+
+		// Publicación de evento de dominio en Valkey Streams
+		if c.publisher != nil {
+			totalCantidad := 0
+			for _, item := range reqItems {
+				totalCantidad += item.Cantidad
+			}
+
+			event := events.PedidoCreadoEvent{
+				PedidoID:  ped.ID,
+				TenantID:  uID,
+				Cliente:   ped.NombreCliente,
+				Cantidad:  totalCantidad,
+				Total:     ped.Total,
+				CreatedAt: time.Now().UTC(),
+			}
+
+			if _, err := c.publisher.PublishPedidoCreado(context.Background(), event); err != nil {
+				log.Printf("[events] Error publicando pedido.creado: %v", err)
+			}
+		}
+	}(pedido, req.Items, usuarioIDVal, tokenEmail)
 
 	numeroPedido := fmt.Sprintf("MC-%06d", pedido.ID)
 
