@@ -1,5 +1,5 @@
 import { useRegisterSW } from "virtual:pwa-register/react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 
 /**
  * Banner de actualizacion del service worker (U4-T3).

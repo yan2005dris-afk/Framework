@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/Components/ui/button";
 import {
   Sheet,
   SheetClose,
@@ -8,12 +8,12 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/Components/ui/sheet";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/Components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAuth } from "../../Context/useAuth";
 import { Icon, type IconName } from "../Share/Icon";
@@ -307,7 +307,7 @@ export const Sidebar = ({
       </aside>
 
       {/* Drawer móvil con ui/sheet */}
-      <Sheet open={mobileOpen} onOpenChange={(open) => !open && onCloseMobile?.()}>
+      <Sheet open={mobileOpen} onOpenChange={(open: boolean) => !open && onCloseMobile?.()}>
         <SheetContent
           side="left"
           className="w-72 p-0 border-r border-slate-800 bg-slate-900"
