@@ -32,17 +32,20 @@ BEGIN
     -- Lista de tablas del Backend
     FOREACH tbl IN ARRAY tbls
     LOOP
-        IF to_regclass(quote_ident(old_schema) || '.' || quote_ident(tbl)) IS NOT NULL THEN
+        -- Si la tabla ya existe en el nuevo schema 'backend'
+        IF to_regclass(quote_ident(new_schema) || '.' || quote_ident(tbl)) IS NOT NULL THEN
+            RAISE NOTICE 'tabla % ya está en backend.%', tbl, tbl;
+            -- Si quedó una tabla remanente en public, la eliminamos para evitar duplicados
+            IF to_regclass(quote_ident(old_schema) || '.' || quote_ident(tbl)) IS NOT NULL THEN
+                EXECUTE format('DROP TABLE IF EXISTS %I.%I CASCADE', old_schema, tbl);
+                RAISE NOTICE 'tabla remanente %I.%I eliminada', old_schema, tbl;
+            END IF;
+        ELSIF to_regclass(quote_ident(old_schema) || '.' || quote_ident(tbl)) IS NOT NULL THEN
             EXECUTE format('ALTER TABLE %I.%I SET SCHEMA %I',
                            old_schema, tbl, new_schema);
             RAISE NOTICE 'tabla % migrada a backend.%', tbl, tbl;
         ELSE
-            -- Si ya está en backend, no hacer nada
-            IF to_regclass(quote_ident(new_schema) || '.' || quote_ident(tbl)) IS NOT NULL THEN
-                RAISE NOTICE 'tabla % ya está en backend.%', tbl, tbl;
-            ELSE
-                RAISE NOTICE 'tabla % no encontrada en public ni backend, saltando', tbl;
-            END IF;
+            RAISE NOTICE 'tabla % no encontrada en public ni backend, saltando', tbl;
         END IF;
     END LOOP;
 END
