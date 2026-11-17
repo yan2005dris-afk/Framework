@@ -43,9 +43,9 @@
 # El unico build con contexto raiz es el gateway, que solo necesita Frontend/.
 # Excluir estos baja el contexto de ~440MB a ~1MB. Los volumenes del
 # compose (init.sql del Backend) son bind mounts y no pasan por el contexto.
-Backend
-auth-service
-fastAPI_SaaS
+src/Backend
+src/auth-service
+src/fastAPI_SaaS
 tests
 
 # --- Documentacion y tooling --------------------------------------------------

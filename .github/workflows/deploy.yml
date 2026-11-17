@@ -57,20 +57,20 @@ jobs:
       matrix:
         include:
           - image: backend
-            context: ./Backend
-            dockerfile: Backend/Dockerfile
+            context: ./src/Backend
+            dockerfile: src/Backend/Dockerfile
           - image: saas-api
-            context: ./fastAPI_SaaS
-            dockerfile: fastAPI_SaaS/Dockerfile
+            context: ./src/fastAPI_SaaS
+            dockerfile: src/fastAPI_SaaS/Dockerfile
           - image: auth-service
-            context: ./auth-service
-            dockerfile: auth-service/Dockerfile
+            context: ./src/auth-service
+            dockerfile: src/auth-service/Dockerfile
           # El gateway es el unico con contexto en la raiz: su Dockerfile es
           # multistage y compila el SPA con node+pnpm antes de copiar el dist.
           # Por eso ignora el .dockerignore de cada servicio y usa el de la raiz.
           - image: gateway
             context: .
-            dockerfile: gateway/Dockerfile
+            dockerfile: src/gateway/Dockerfile
 
     steps:
       - name: Checkout repository

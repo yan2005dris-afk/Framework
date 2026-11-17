@@ -14,13 +14,13 @@ ven los dos tenants.
 
 Pre-requisitos:
     docker compose up -d db
-    (cd fastAPI_SaaS && SAAS_DB_HOST=localhost SAAS_DB_PORT=5432 \\
+    (cd src/fastAPI_SaaS && SAAS_DB_HOST=localhost SAAS_DB_PORT=5432 \\
         SAAS_DB_NAME=multicatalogo uv run alembic upgrade head)
 
 Ejecutar:
     cd tests/integration
     SAAS_DB_USER=saas_app SAAS_DB_PASSWORD=saas_app \\
-        uv run --project ../../fastAPI_SaaS pytest test_saas_rls_integration.py -v
+        uv run --project ../../src/fastAPI_SaaS pytest test_saas_rls_integration.py -v
 
 Variables (todas con prefijo `SAAS_`, defaults pensados para el stack local):
 

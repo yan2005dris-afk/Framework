@@ -25,7 +25,7 @@ WORKDIR /app
 # las preserva en un volumen con nombre montado sobre /app/node_modules, que
 # tapa el node_modules del host. Para actualizarlas hay que rebuildear
 # (`docker compose --profile dev build frontend`).
-COPY Frontend/package.json Frontend/pnpm-lock.yaml ./
+COPY src/Frontend/package.json src/Frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 EXPOSE 5173
