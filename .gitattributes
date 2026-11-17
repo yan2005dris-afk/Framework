@@ -1,0 +1,28 @@
+# Normalizacion de finales de linea.
+#
+# El repo se guarda en LF. Sin esto, un checkout en Windows con
+# core.autocrlf=true reescribe todo el arbol en CRLF y `git status` reporta
+# cientos de archivos "modificados" que en realidad no cambiaron.
+* text=auto
+
+# Binarios: nunca normalizar ni intentar diff textual.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+
+# Lockfiles y snapshots generados: diff ruidoso, se marcan como generados.
+pnpm-lock.yaml linguist-generated=true
+uv.lock linguist-generated=true
+go.sum linguist-generated=true
+
+# Scripts que Windows ejecuta: se respeta su EOL nativo.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

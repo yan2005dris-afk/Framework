@@ -18,7 +18,7 @@ USERS_URL = "/api/saas/tenants/{tenant_id}/users"
 
 
 async def _create_tenant(db: AsyncSession, slug: str) -> int:
-    from app.models.tenant import Tenant
+    from app.shared.tenancy.models import Tenant
 
     tenant = Tenant(slug=slug, name=slug)
     db.add(tenant)
@@ -28,9 +28,9 @@ async def _create_tenant(db: AsyncSession, slug: str) -> int:
 
 
 async def _create_user(db: AsyncSession, tenant_id: int, email: str, rol: str = "member") -> int:
-    from app.crud.user import user_crud
+    from app.modules.usuarios.service import user_service
 
-    user = await user_crud.create(
+    user = await user_service.create(
         db, tenant_id=tenant_id, email=email, password="secret123", rol=rol
     )
     return user.id
@@ -182,11 +182,11 @@ async def test_patch_changes_role_and_password(client: AsyncClient, db: AsyncSes
     assert resp.status_code == 200, resp.text
     assert resp.json()["rol"] == "admin"
 
-    from app.crud.user import user_crud
+    from app.modules.usuarios.service import user_service
 
-    stored = await user_crud.get_by_id(db, user_id, tenant_id)
-    assert user_crud.verify_password("nuevasecreta", stored.hashed_password)
-    assert not user_crud.verify_password("secret123", stored.hashed_password)
+    stored = await user_service.get_by_id(db, user_id, tenant_id)
+    assert user_service.verify_password("nuevasecreta", stored.hashed_password)
+    assert not user_service.verify_password("secret123", stored.hashed_password)
 
 
 async def test_patch_duplicate_email_returns_400(client: AsyncClient, db: AsyncSession) -> None:
@@ -229,9 +229,9 @@ async def test_delete_returns_204_and_removes_user(
     assert resp.status_code == 204, resp.text
     assert resp.content == b""
 
-    from app.crud.user import user_crud
+    from app.modules.usuarios.service import user_service
 
-    assert await user_crud.get_by_id(db, user_id, tenant_id) is None
+    assert await user_service.get_by_id(db, user_id, tenant_id) is None
 
 
 async def test_delete_unknown_user_returns_404(client: AsyncClient, db: AsyncSession) -> None:
@@ -259,7 +259,7 @@ async def test_create_user_on_unknown_tenant_returns_404(
 
 async def _user_count(db: AsyncSession, tenant_id: int) -> int:
     """Cuenta usuarios del tenant leyendo directo de la BD."""
-    from app.crud.user import user_crud
+    from app.modules.usuarios.service import user_service
 
-    _, total = await user_crud.list_by_tenant(db, tenant_id)
+    _, total = await user_service.list_by_tenant(db, tenant_id)
     return total

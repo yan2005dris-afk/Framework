@@ -22,7 +22,7 @@ WEBHOOK_URL = "/api/saas/webhooks/stripe"
 
 
 async def _tenant(db: AsyncSession, slug: str) -> int:
-    from app.models.tenant import Tenant
+    from app.shared.tenancy.models import Tenant
 
     tenant = Tenant(slug=slug, name=slug)
     db.add(tenant)
@@ -32,7 +32,7 @@ async def _tenant(db: AsyncSession, slug: str) -> int:
 
 
 async def _plan(db: AsyncSession, slug: str = "pro") -> int:
-    from app.models.plan import Plan
+    from app.modules.billing.models import Plan
 
     plan = Plan(
         slug=slug,
@@ -188,7 +188,7 @@ async def test_cancel_marks_period_end_instead_of_deleting(
     # La fila sigue existiendo: cancelada, no borrada.
     from sqlalchemy import select
 
-    from app.models.subscription import Subscription
+    from app.modules.billing.models import Subscription
 
     sub = (
         await db.execute(select(Subscription).where(Subscription.tenant_id == tenant_id))

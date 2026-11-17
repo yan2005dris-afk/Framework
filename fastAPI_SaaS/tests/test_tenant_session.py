@@ -14,9 +14,9 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.core import db as db_module
-from app.core.db import get_tenant_db
-from app.deps.principal import Principal
+from app.shared.db import session as db_module
+from app.shared.db.session import get_tenant_db
+from app.shared.tenancy.principal import Principal
 
 pytestmark = pytest.mark.asyncio
 
@@ -41,7 +41,7 @@ def db_url(tmp_path) -> str:
 @pytest.fixture
 async def maker(db_url: str) -> async_sessionmaker[AsyncSession]:
     """Sessionmaker sobre sqlite en archivo, con el schema ya creado."""
-    from app.models import Base
+    from app.registry import Base
 
     engine = create_async_engine(db_url)
     async with engine.begin() as conn:
@@ -95,7 +95,7 @@ async def test_superadmin_reaches_any_tenant(maker) -> None:
 
 
 async def test_request_commits_once_at_the_end(maker, db_url: str) -> None:
-    from app.models.tenant import Tenant
+    from app.shared.tenancy.models import Tenant
 
     async with maker() as session:
         gen = get_tenant_db(tenant_id=1, principal=_principal(), db=session)
@@ -115,7 +115,7 @@ async def test_request_commits_once_at_the_end(maker, db_url: str) -> None:
 
 async def test_error_inside_request_rolls_back(maker) -> None:
     """Un 404 a mitad de request no deja datos persistidos."""
-    from app.models.tenant import Tenant
+    from app.shared.tenancy.models import Tenant
     from sqlalchemy import select
 
     async with maker() as session:

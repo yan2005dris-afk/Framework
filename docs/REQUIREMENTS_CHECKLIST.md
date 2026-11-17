@@ -156,7 +156,7 @@ React SPA (:5173) ──► Caddy/Nginx (U4: proxy inverso + SSL)
 > aislamiento se sostiene en tres capas: filtro por `tenant_id` en cada query,
 > guards de scope/rol en cada endpoint, y Row-Level Security en Postgres.
 
-- [x] Identidad real desde los headers `X-User-*` (`app/deps/principal.py`), sin tenant ni rol por defecto
+- [x] Identidad real desde los headers `X-User-*` (`app/shared/tenancy/principal.py`), sin tenant ni rol por defecto
 - [x] `401` sin identidad, `403` fuera de scope o sin rol admin, `404` tenant/usuario inexistente
 - [x] CRUD `users_saas` (`POST/GET/PATCH/DELETE /api/saas/tenants/{tenant_id}/users`) con email único por tenant
 - [x] Passwords con bcrypt (SHA-256 + base64 previo para no cortar a 72 bytes); el hash nunca sale por la API

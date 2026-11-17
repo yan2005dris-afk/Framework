@@ -46,7 +46,7 @@ from sqlalchemy.dialects import postgresql
 
 # Misma fuente de verdad que `alembic/env.py` y que el runtime: el rol de la
 # app y su password salen de la config, no de literales en la migracion.
-from app.core.config import settings
+from app.shared.config import settings
 
 revision: str = "0004_saas_app_role"
 down_revision: Union[str, None] = "0003_rls_policies"

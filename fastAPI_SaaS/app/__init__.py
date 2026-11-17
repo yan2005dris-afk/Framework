@@ -8,8 +8,10 @@ manejar en linea caliente.
 Convenciones:
 - Cada tabla SaaS tiene `tenant_id` FK -> `tenants.id`.
 - Async-first: SQLAlchemy 2.x con asyncpg.
-- Config por env via pydantic-settings (`app/core/config.py`).
-- Settings publica en `app.core.config.settings`.
+- Organizacion por bounded contexts: `app/shared/` (plataforma) y
+  `app/modules/{pedidos,usuarios,billing}/` (features).
+- Config por env via pydantic-settings (`app/shared/config.py`).
+- Settings publica en `app.shared.config.settings`.
 """
 
 __version__ = "0.1.0"

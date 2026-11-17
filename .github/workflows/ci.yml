@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - main
+      - develop
       - 'feature/**'
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
   backend:
@@ -65,3 +67,31 @@ jobs:
 
       - name: Build Frontend Application
         run: pnpm run build
+
+  saas:
+    name: SaaS CI (FastAPI + pytest + import-linter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./fastAPI_SaaS
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ./fastAPI_SaaS/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Run tests (pytest)
+        run: uv run pytest -q
+
+      - name: Check architecture contracts (import-linter)
+        # Falla si alguien vuelve a acoplar los bounded contexts:
+        # independencia entre modulos, shared sin modules y capas
+        # router -> service -> repository. Contratos en pyproject.toml.
+        run: uv run lint-imports

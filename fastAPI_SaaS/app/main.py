@@ -4,9 +4,9 @@ Bootstrap de la aplicacion:
 - Crea la instancia `app`.
 - Configura CORS con `AllowCredentials=True` y origenes por env
   (mismo patron que `Backend/main.go`).
-- Monta routers: `app/api/health.py`, `app/api/auth.py` (proxy al
-  auth-service), `app/api/users.py` (CRUD multi-tenant) y
-  `app/api/billing.py` (planes y suscripciones).
+- Monta los routers compartidos (`app/shared/health.py`, proxy de auth en
+  `app/shared/auth_proxy.py`) y delega cada bounded context a su
+  `register(app)` (`app/modules/{pedidos,usuarios,billing}`).
 - `lifespan` queda como hook para DB engine startup/shutdown (T1.2).
 
 Para correr en dev:
@@ -20,17 +20,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.auth import _close_client, router as auth_router
-from app.api.billing import router as billing_router
-from app.api.health import router as health_router
-from app.api.users import router as users_router
-from app.core.config import settings
-from app.core.logging import configure_logging
-from app.middleware.tenant import set_tenant_context
+from app.modules import billing, pedidos, usuarios
+from app.shared.auth_proxy import _close_client, router as auth_router
+from app.shared.config import settings
+from app.shared.health import router as health_router
+from app.shared.logging import configure_logging
+from app.shared.tenancy.middleware import set_tenant_context
 
 # Se llama a nivel de modulo: uvicorn ya configuro sus loggers cuando importa
 # la app, asi que esta es la ultima palabra sobre el formato de salida.
 configure_logging()
+
+#: Bounded contexts montados por `main.py`. Cada uno expone `register(app)`
+#: (router + exception handlers propios).
+FEATURE_MODULES = (pedidos, usuarios, billing)
 
 
 @asynccontextmanager
@@ -61,11 +64,13 @@ app.add_middleware(
 # Middleware de aislamiento multi-tenant
 app.middleware("http")(set_tenant_context)
 
-# Routers
+# Routers compartidos (no pertenecen a un bounded context)
 app.include_router(health_router)
 app.include_router(auth_router)
-app.include_router(users_router)
-app.include_router(billing_router)
+
+# Modulos de feature: cada uno monta su router y sus exception handlers.
+for module in FEATURE_MODULES:
+    module.register(app)
 
 
 @app.get("/")

@@ -62,6 +62,26 @@ uv run pytest -v             # verboso
 uv run pytest --cov=app     # coverage
 ```
 
+## Módulo de pedidos (AA1-5)
+
+Bounded context `app/modules/pedidos/`: `router.py` → `service.py` →
+`repository.py`, con schemas Pydantic en `schemas.py`, modelos en `models.py`,
+máquina de estados en `enums.py` y errores de dominio en `exceptions.py`.
+El router se monta desde `app/main.py` vía `pedidos.register(app)`.
+
+| Método | Ruta | Notas |
+|---|---|---|
+| `POST` | `/api/{tenant_id}/pedidos` | `cantidad > 0` y `total > 0` validados por Pydantic (422) |
+| `GET` | `/api/{tenant_id}/pedidos` | Paginado, filtro `?estado=` |
+| `GET` | `/api/{tenant_id}/pedidos/{pedido_id}` | 404 si es de otro tenant |
+| `PUT` | `/api/{tenant_id}/pedidos/{pedido_id}/estado` | Máquina de estados; 400 si la transición es inválida |
+| `DELETE` | `/api/{tenant_id}/pedidos/{pedido_id}` | 204; requiere admin del tenant |
+
+La migración `0005_pedidos` crea la tabla, los `CHECK` de `cantidad`/`total`/
+`estado`, la política RLS y los `GRANT` al rol de aplicación.
+
+Tests: `uv run pytest tests/test_pedidos_api.py -v`.
+
 ## Variables de entorno
 
 Ver `.env.example`. Convenciones:

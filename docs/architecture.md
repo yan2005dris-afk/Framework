@@ -121,22 +121,40 @@ Las FK cross-schema funcionan (Postgres las soporta dentro de la misma BD). Las 
   - `/api/saas/auth/{login,logout,refresh,me}` — proxies HTTP al auth-service
   - `/api/saas/tenants/{tenant_id}/users` (CRUD) y `/api/saas/tenants/{tenant_id}/subscription`
   - `/api/saas/plans`, `/api/saas/webhooks/stripe` (stub)
+  - `/api/{tenant_id}/pedidos` (CRUD + `PUT .../{pedido_id}/estado`)
+- Organización por **bounded contexts** (monolito modular):
+  - `app/shared/` es la plataforma y no conoce ningún feature: `config.py`,
+    `logging.py`, `health.py`, `auth_proxy.py`, `db/` (`base.py` con
+    `TimestampMixin`, `session.py` con `get_db`/`get_tenant_db`) y `tenancy/`
+    (`middleware.py`, `dependencies.py`, `principal.py`, `models.py`,
+    `service.py`, `ports.py`).
+  - `app/modules/{pedidos,usuarios,billing}/` son features autocontenidos con
+    la misma forma: `router.py` → `service.py` → `repository.py`, más
+    `models.py`, `schemas.py`, `exceptions.py`, `dependencies.py`. Cada uno
+    expone `register(app)` (monta su router y sus exception handlers).
+  - `app/registry.py` es el único módulo que importa los tres contexts; lo usa
+    `alembic/env.py` para conocer el schema completo.
+- Contratos de dependencias verificados con `import-linter` (`lint-imports`,
+  configurados en `pyproject.toml`): los módulos no se importan entre sí,
+  `app.shared` no importa `app.modules`, y dentro de cada módulo el flujo es
+  `router → service → repository`.
 - Identidad: **no** revalida el JWT. Lee los headers que el gateway copia desde
   `forward_auth` (`X-User-Id`, `X-Email`, `X-Rol`, `X-Tenant-Id`, `X-Rol-Saas`)
   y aplica `require_tenant_scope` / `require_tenant_admin`
-  (`app/deps/principal.py`).
+  (`app/shared/tenancy/principal.py`).
 - Aislamiento multi-tenant en tres capas:
-  1. filtro `WHERE tenant_id = :tenant` en cada query del CRUD;
+  1. filtro `WHERE tenant_id = :tenant` en cada query del repositorio;
   2. guards de scope/rol por endpoint (401/403) antes de tocar la BD;
-  3. RLS en Postgres (`0003_rls_policies`) con `FORCE ROW LEVEL SECURITY`, que
-     compara contra el GUC `app.current_tenant` que cada request setea con
-     `SET LOCAL`. Requiere que el servicio conecte con un rol **no superuser**
-     (migración `0004_saas_app_role`): un superuser ignora RLS.
-- Modelos en `app/models/`: `base.py` (con `TimestampMixin`), `tenant.py`,
-  `user.py`, `plan.py`, `subscription.py`.
+  3. RLS en Postgres (`0003_rls_policies`, `0005_pedidos`) con `FORCE ROW LEVEL
+     SECURITY`, que compara contra el GUC `app.current_tenant` que cada request
+     setea con `SET LOCAL`. Requiere que el servicio conecte con un rol **no
+     superuser** (migración `0004_saas_app_role`): un superuser ignora RLS.
+- Modelos: `shared/tenancy/models.py` (`Tenant`), `modules/usuarios/models.py`
+  (`UserSaaS`), `modules/billing/models.py` (`Plan`, `Subscription`) y
+  `modules/pedidos/models.py` (`Pedido`).
 - Migraciones Alembic: `0001_initial` (tenants + users_saas), `0002_billing`
   (plans + subscriptions + catálogo semilla), `0003_rls_policies`,
-  `0004_saas_app_role`.
+  `0004_saas_app_role`, `0005_pedidos`.
 
 ### 5. Flujo de un request típico
 

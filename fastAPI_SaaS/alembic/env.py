@@ -1,8 +1,11 @@
 """Entorno de Alembic.
 
 Conecta `Base.metadata` (declarativa de SQLAlchemy 2.x) con la BD gestionada
-por `app.core.config.settings`. La URL se lee de la env (via Settings)
+por `app.shared.config.settings`. La URL se lee de la env (via Settings)
 para tener una sola fuente de verdad entre el codigo y las migraciones.
+
+`app.registry` importa todos los modelos de todos los bounded contexts: es
+el unico punto que conoce el schema completo.
 
 La URL es `settings.migration_database_url_sync`, o sea el DSN **de admin**
 (`SAAS_DB_ADMIN_*`), no el de runtime. Las migraciones crean tablas, roles y
@@ -29,8 +32,8 @@ from sqlalchemy import engine_from_config, pool
 # se invoque desde CWD distinto.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.core.config import settings  # noqa: E402
-from app.models import Base  # noqa: E402,E501 (registra todos los modelos)
+from app.registry import Base  # noqa: E402  (registra todos los modelos)
+from app.shared.config import settings  # noqa: E402
 
 # Cargar logging de alembic.ini (para ver INFO/WARN de las migraciones)
 config = context.config

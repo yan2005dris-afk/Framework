@@ -1,7 +1,8 @@
 """Tests del proxy /api/saas/auth -> auth-service.
 
 Tecnica: httpx.MockTransport reemplaza el transporte del cliente httpx
-interno que usa app.api.auth. Asi no hay conexiones reales al upstream.
+interno que usa app.shared.auth_proxy. Asi no hay conexiones reales al
+upstream.
 
 Convencion: cada test construye su propio MockTransport con respuestas
 programables y se inyecta como el cliente httpx que usa el proxy.
@@ -15,8 +16,8 @@ import httpx
 import pytest
 from httpx import Response
 
-from app.api import auth as auth_module
-from app.core.config import settings
+from app.shared import auth_proxy as auth_module
+from app.shared.config import settings
 
 
 def _build_mock_client(handler) -> httpx.AsyncClient:

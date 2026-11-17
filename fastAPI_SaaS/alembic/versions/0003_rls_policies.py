@@ -6,7 +6,7 @@ y pasa a estar en la propia Postgres.
 Idea
 ----
 Cada request tenant-scoped setea el GUC `app.current_tenant`
-(`app/core/db.py::get_tenant_db`, `set_config(..., true)` = SET LOCAL) con el
+(`app/shared/db/session.py::get_tenant_db`, `set_config(..., true)` = SET LOCAL) con el
 tenant efectivo. Las politicas comparan `tenant_id` contra ese GUC.
 
 Dos detalles que hacen que esto funcione de verdad:

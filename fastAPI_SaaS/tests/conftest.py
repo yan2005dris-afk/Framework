@@ -24,9 +24,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.core.db import get_db
 from app.main import app
-from app.models import Base  # noqa: F401  (registra todos los modelos)
+from app.registry import Base  # noqa: F401  (registra todos los modelos)
+from app.shared.db.session import get_db
 
 
 @pytest.fixture

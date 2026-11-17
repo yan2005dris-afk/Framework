@@ -2,7 +2,7 @@
 import json
 import logging
 
-from app.core.logging import JsonFormatter
+from app.shared.logging import JsonFormatter
 
 
 def _record(msg: str = "hola", level: int = logging.INFO, **extra) -> logging.LogRecord:

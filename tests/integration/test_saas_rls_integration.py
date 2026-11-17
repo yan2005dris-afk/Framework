@@ -61,6 +61,7 @@ REQUIRED_POLICIES = {
     "users_saas_tenant_isolation",
     "subscriptions_tenant_isolation",
     "tenants_self_read",
+    "pedidos_tenant_isolation",
 }
 
 
@@ -102,6 +103,11 @@ def _seed_fixtures(cur) -> None:
             "INSERT INTO subscriptions (tenant_id, plan_id, status) "
             "VALUES (%s, (SELECT id FROM plans ORDER BY id LIMIT 1), 'active')",
             (tenant_id,),
+        )
+        cur.execute(
+            "INSERT INTO pedidos (tenant_id, cliente, cantidad, total, estado) "
+            "VALUES (%s, %s, 1, 10.00, 'pendiente')",
+            (tenant_id, f"cliente-{slug}"),
         )
 
 
@@ -190,6 +196,30 @@ class TestRowLevelSecurity:
         cur.execute("SELECT tenant_id FROM subscriptions")
         assert {row[0] for row in cur.fetchall()} == {TENANT_A}
 
+    def test_pedidos_are_isolated(self, conn):
+        connection, cur = conn
+        cur.execute("SELECT set_config('app.current_tenant', %s, true)", (str(TENANT_A),))
+        cur.execute("SELECT tenant_id FROM pedidos")
+        assert {row[0] for row in cur.fetchall()} == {TENANT_A}
+
+    def test_insert_pedido_for_other_tenant_is_denied(self, conn):
+        connection, cur = conn
+        cur.execute("SELECT set_config('app.current_tenant', %s, true)", (str(TENANT_A),))
+        with pytest.raises(pg_errors.InsufficientPrivilege):
+            cur.execute(
+                "INSERT INTO pedidos (tenant_id, cliente, cantidad, total, estado) "
+                "VALUES (%s, 'cross-tenant', 1, 10.00, 'pendiente')",
+                (TENANT_B,),
+            )
+        connection.rollback()
+
+    def test_delete_other_tenant_pedido_is_denied(self, conn):
+        connection, cur = conn
+        cur.execute("SELECT set_config('app.current_tenant', %s, true)", (str(TENANT_A),))
+        cur.execute("DELETE FROM pedidos WHERE cliente = %s", ("cliente-rls-it-b",))
+        assert cur.rowcount == 0
+        connection.rollback()
+
     def test_tenants_row_is_isolated(self, conn):
         connection, cur = conn
         cur.execute("SELECT set_config('app.current_tenant', %s, true)", (str(TENANT_A),))
@@ -231,6 +261,8 @@ class TestRowLevelSecurity:
         cur.execute("SELECT count(*) FROM users_saas")
         assert cur.fetchone()[0] == 0
         cur.execute("SELECT count(*) FROM subscriptions")
+        assert cur.fetchone()[0] == 0
+        cur.execute("SELECT count(*) FROM pedidos")
         assert cur.fetchone()[0] == 0
 
     def test_superadmin_path_switches_tenant_and_sees_it(self, conn):
