@@ -55,6 +55,9 @@ SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     expire_on_commit=False,
 )
 
+# Alias para uso en workers y tareas asincronas fuera del contexto HTTP
+async_session_factory = SessionLocal
+
 #: GUC que leen las politicas RLS.
 TENANT_GUC = "app.current_tenant"
 

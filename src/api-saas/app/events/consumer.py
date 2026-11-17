@@ -12,8 +12,9 @@ import logging
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import text
 from app.modules.pedidos.service import PedidoService
-from app.shared.db.session import async_session_factory
+from app.shared.db.session import SessionLocal
 from app.shared.valkey import get_valkey_client
 
 logger = logging.getLogger("uvicorn.error")
@@ -94,9 +95,12 @@ class PedidosEventConsumer:
                 total = Decimal(str(payload["total"]))
 
                 # Inserción en base de datos multi-tenant
-                async with async_session_factory() as session:
+                async with SessionLocal() as session:
                     # Configurar contexto de tenant para RLS
-                    await session.execute(f"SET LOCAL app.current_tenant = '{tenant_id}'")
+                    await session.execute(
+                        text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+                        {"tenant_id": str(tenant_id)},
+                    )
                     await self.service.crear(
                         session,
                         tenant_id=tenant_id,
